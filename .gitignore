@@ -1,0 +1,3 @@
+# Nur lokale Arbeitsdateien
+__pycache__/
+*.pyc

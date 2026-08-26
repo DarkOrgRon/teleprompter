@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Teleprompter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ==================== Screen: Textliste ==================== -->
+<section id="screen-list" class="screen is-active">
+  <header class="topbar">
+    <h1 class="topbar__title">Meine Texte</h1>
+    <div class="topbar__actions">
+      <button type="button" id="btnOpenSettings" class="iconbtn" aria-label="Einstellungen">⚙</button>
+    </div>
+  </header>
+
+  <div class="scrollarea">
+    <p id="listEmpty" class="empty is-hidden">
+      Noch kein Text vorhanden.<br>
+      Tippe unten auf <strong>Neuer Text</strong>, um anzufangen.
+    </p>
+
+    <ul id="textList" class="textlist"></ul>
+
+    <div class="card card--muted">
+      <h2 class="card__title">Sicherung</h2>
+      <p class="card__text">
+        Deine Texte liegen nur auf diesem Gerät. Für ein Backup oder einen Gerätewechsel
+        exportiere sie als Datei.
+      </p>
+      <div class="card__actions">
+        <button type="button" id="btnExport" class="btn btn--ghost">Texte exportieren</button>
+        <button type="button" id="btnImport" class="btn btn--ghost">Texte importieren</button>
+      </div>
+      <input type="file" id="fileImport" accept="application/json,.json,text/plain,.txt" class="visually-hidden">
+    </div>
+
+    <p class="privacy-note">
+      🔒 Diese App sendet nichts ins Internet. Video, Ton und Texte bleiben auf deinem Gerät.
+    </p>
+  </div>
+
+  <footer class="bottombar">
+    <button type="button" id="btnNewText" class="btn btn--primary btn--wide">＋ Neuer Text</button>
+  </footer>
+</section>
+
+<!-- ==================== Screen: Editor ==================== -->
+<section id="screen-editor" class="screen">
+  <header class="topbar">
+    <button type="button" id="btnEditorBack" class="iconbtn" aria-label="Zurück">←</button>
+    <h1 class="topbar__title" id="editorHeadline">Text bearbeiten</h1>
+    <div class="topbar__actions">
+      <button type="button" id="btnEditorSave" class="btn btn--primary btn--small">Speichern</button>
+    </div>
+  </header>
+
+  <div class="scrollarea">
+    <label class="field">
+      <span class="field__label">Titel</span>
+      <input type="text" id="editorTitle" class="input" placeholder="z. B. Intro Japan-Video" autocomplete="off">
+    </label>
+
+    <label class="field field--grow">
+      <span class="field__label">Text</span>
+      <textarea id="editorBody" class="input textarea" placeholder="Hier deinen Sprechertext einfügen …&#10;&#10;Eine Leerzeile erzeugt später einen Absatzabstand im Prompter."></textarea>
+    </label>
+
+    <p class="hint" id="editorStats">0 Wörter</p>
+  </div>
+</section>
+
+<!-- ==================== Screen: Einstellungen ==================== -->
+<section id="screen-settings" class="screen">
+  <header class="topbar">
+    <button type="button" id="btnSettingsBack" class="iconbtn" aria-label="Zurück">←</button>
+    <h1 class="topbar__title">Einstellungen</h1>
+  </header>
+
+  <div class="scrollarea">
+
+    <div class="preview" id="settingsPreview">
+      <p class="preview__text" id="settingsPreviewText">So sieht dein Text im Prompter aus. Achte darauf, dass du ihn aus deiner Aufnahmeentfernung noch bequem lesen kannst.</p>
+    </div>
+
+    <h2 class="section">Text &amp; Tempo</h2>
+
+    <div class="field">
+      <span class="field__label">Tempo <output id="outWpm" class="out">130 Wörter/Min</output></span>
+      <input type="range" id="setWpm" class="range" min="60" max="240" step="5">
+      <span class="hint">Bestimmt, wie schnell der Text läuft. Das Tempo passt sich automatisch an Schriftgröße und Textbreite an.</span>
+    </div>
+
+    <div class="field">
+      <span class="field__label">Schriftgröße <output id="outFontSize" class="out">44 px</output></span>
+      <input type="range" id="setFontSize" class="range" min="24" max="120" step="2">
+    </div>
+
+    <div class="field">
+      <span class="field__label">Zeilenabstand <output id="outLineHeight" class="out">1,4</output></span>
+      <input type="range" id="setLineHeight" class="range" min="10" max="25" step="1">
+    </div>
+
+    <div class="field">
+      <span class="field__label">Seitenrand <output id="outMargin" class="out">8 %</output></span>
+      <input type="range" id="setMargin" class="range" min="0" max="25" step="1">
+    </div>
+
+    <label class="field">
+      <span class="field__label">Schriftfarbe</span>
+      <select id="setTextColor" class="input select">
+        <option value="#ffffff">Weiß</option>
+        <option value="#ffe066">Gelb</option>
+        <option value="#95c11f">Grün</option>
+      </select>
+    </label>
+
+    <h2 class="section">Prompter</h2>
+
+    <label class="field">
+      <span class="field__label">Lesemarke</span>
+      <select id="setMarker" class="input select">
+        <option value="off">Aus</option>
+        <option value="line">Linie</option>
+        <option value="arrow">Pfeil</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Position der Lesemarke</span>
+      <select id="setMarkerPos" class="input select">
+        <option value="top">Oben – näher an der Kamera (empfohlen)</option>
+        <option value="center">Mittig</option>
+      </select>
+      <span class="hint">Oben liegt der Text näher an der Frontkamera – dein Blick wirkt dadurch direkter.</span>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Countdown vor dem Start</span>
+      <select id="setCountdown" class="input select">
+        <option value="0">Kein Countdown</option>
+        <option value="3">3 Sekunden</option>
+        <option value="5">5 Sekunden</option>
+        <option value="10">10 Sekunden</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Bildschirm-Ausrichtung</span>
+      <select id="setOrientation" class="input select">
+        <option value="portrait">Hochformat</option>
+        <option value="landscape">Querformat</option>
+      </select>
+    </label>
+
+    <div class="switchrow">
+      <label class="switch">
+        <input type="checkbox" id="setMirrorH">
+        <span>Spiegeln (links/rechts)</span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" id="setMirrorV">
+        <span>Spiegeln (oben/unten)</span>
+      </label>
+      <span class="hint">Nur nötig, wenn du den Text über eine Spiegelscheibe abliest.</span>
+    </div>
+
+    <h2 class="section">Kamera &amp; Ton</h2>
+
+    <div class="switchrow">
+      <label class="switch">
+        <input type="checkbox" id="setPreview">
+        <span>Selbstbild einblenden</span>
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="field__label">Größe des Selbstbildes</span>
+      <select id="setPreviewSize" class="input select">
+        <option value="small">Klein</option>
+        <option value="medium">Mittel</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Mikrofon</span>
+      <select id="setMic" class="input select">
+        <option value="">Systemstandard</option>
+      </select>
+      <span class="hint" id="micHint">Tippe auf „Mikrofone suchen“, damit die Namen deiner Mikrofone angezeigt werden. Steck dazu den Empfänger deines Funkmikrofons an.</span>
+    </label>
+
+    <div class="card__actions">
+      <button type="button" id="btnScanMics" class="btn btn--ghost">Mikrofone suchen</button>
+    </div>
+
+    <div class="switchrow">
+      <label class="switch">
+        <input type="checkbox" id="setAudioFilters">
+        <span>Sprachfilter des Handys nutzen</span>
+      </label>
+      <span class="hint">
+        Aus ist besser, wenn du ein externes Mikrofon verwendest – die Filter (Rauschunterdrückung,
+        Echo, Pegelautomatik) verschlechtern guten Ton oft hörbar.
+      </span>
+    </div>
+
+    <h2 class="section">Diese App</h2>
+
+    <div class="card card--muted">
+      <p class="card__text" id="aboutText">Version wird geladen …</p>
+      <div class="card__actions">
+        <button type="button" id="btnResetSettings" class="btn btn--ghost">Einstellungen zurücksetzen</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ==================== Screen: Prompter ==================== -->
+<section id="screen-prompter" class="screen screen--black">
+
+  <div id="promptViewport" class="viewport">
+    <div id="promptScroller" class="scroller">
+      <div id="promptBody" class="prompttext"></div>
+    </div>
+    <div id="promptMarker" class="marker" aria-hidden="true"></div>
+  </div>
+
+  <video id="selfview" class="selfview" autoplay muted playsinline></video>
+
+  <div id="statusbar" class="statusbar">
+    <span id="recDot" class="recdot is-hidden" aria-hidden="true"></span>
+    <span id="recTimer" class="statusbar__timer is-hidden">00:00</span>
+    <span id="micLabel" class="statusbar__mic">🎤 —</span>
+  </div>
+
+  <div id="promptControls" class="controls">
+    <div class="controls__row">
+      <button type="button" id="btnPrompterBack" class="iconbtn iconbtn--dark" aria-label="Zurück zur Liste">←</button>
+      <button type="button" id="btnRestart" class="iconbtn iconbtn--dark" aria-label="Zurück zum Anfang">⤒</button>
+      <span class="controls__spacer"></span>
+      <button type="button" id="btnSlower" class="iconbtn iconbtn--dark" aria-label="Langsamer">−</button>
+      <output id="outSpeedLive" class="speedlive">130</output>
+      <button type="button" id="btnFaster" class="iconbtn iconbtn--dark" aria-label="Schneller">＋</button>
+    </div>
+
+    <div class="controls__row controls__row--main">
+      <button type="button" id="btnRecStart" class="btn btn--rec">● Aufnahme + Prompter</button>
+      <button type="button" id="btnPlayOnly" class="btn btn--ghost btn--small">▶ Nur Prompter</button>
+      <button type="button" id="btnRecStop" class="btn btn--stop is-hidden">■ Stopp &amp; speichern</button>
+    </div>
+  </div>
+
+  <div id="countdown" class="countdown is-hidden"><span id="countdownNumber">3</span></div>
+
+  <div id="promptNotice" class="notice is-hidden"></div>
+</section>
+
+<!-- ==================== Dialog: Bestätigung ==================== -->
+<div id="confirmLayer" class="dialoglayer is-hidden">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <h2 class="dialog__title" id="confirmTitle">Wirklich löschen?</h2>
+    <p class="dialog__text" id="confirmText"></p>
+    <div class="dialog__actions">
+      <button type="button" id="btnConfirmNo" class="btn btn--ghost">Abbrechen</button>
+      <button type="button" id="btnConfirmYes" class="btn btn--danger">Löschen</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast is-hidden" role="status" aria-live="polite"></div>
+
+<script src="js/store.js"></script>
+<script src="js/recorder.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
