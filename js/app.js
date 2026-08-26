@@ -682,11 +682,31 @@
     wakeLock = null;
   }
 
+  /**
+   * Laeuft die App installiert (vom Startbildschirm) statt in einem Browser-Tab?
+   * Alle App-Anzeigemodi zaehlen dazu – nur der Modus "browser" ist ein echter Tab.
+   */
+  function isStandalone() {
+    if (window.navigator.standalone === true) return true;
+    if (!window.matchMedia) return false;
+    var modes = ['standalone', 'fullscreen', 'minimal-ui'];
+    for (var i = 0; i < modes.length; i++) {
+      if (window.matchMedia('(display-mode: ' + modes[i] + ')').matches) return true;
+    }
+    return false;
+  }
+
   function enterImmersive() {
     var root = document.documentElement;
     // Vollbild ist nur direkt nach einer Nutzerberuehrung erlaubt
     var mayGoFullscreen = !navigator.userActivation || navigator.userActivation.isActive;
-    if (root.requestFullscreen && mayGoFullscreen) {
+
+    // In der installierten App KEIN Vollbild anfordern: der Bildschirm ist dort
+    // ohnehin frei, und Chrome legt bei jedem Wechsel in den Vollbildmodus einen
+    // Systemhinweis ueber den unteren Bildschirmrand – genau dort, wo die
+    // Aufnahme-Knoepfe sitzen. Im Browser-Tab bleibt Vollbild sinnvoll,
+    // weil dort die Adresszeile Platz kostet.
+    if (root.requestFullscreen && mayGoFullscreen && !isStandalone()) {
       root.requestFullscreen({ navigationUI: 'hide' }).catch(function () { /* nicht kritisch */ });
     }
     if (window.screen && window.screen.orientation && window.screen.orientation.lock) {

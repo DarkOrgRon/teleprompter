@@ -247,6 +247,14 @@
   </div>
 
   <div id="promptControls" class="controls">
+    <!-- Startzeile bewusst oben: bleibt frei von Systemhinweisen und der
+         Gestenleiste am unteren Bildschirmrand -->
+    <div class="controls__row controls__row--main">
+      <button type="button" id="btnRecStart" class="btn btn--rec">● Aufnahme + Prompter</button>
+      <button type="button" id="btnPlayOnly" class="btn btn--ghost btn--small">▶ Nur Prompter</button>
+      <button type="button" id="btnRecStop" class="btn btn--stop is-hidden">■ Stopp &amp; speichern</button>
+    </div>
+
     <div class="controls__row">
       <button type="button" id="btnPrompterBack" class="iconbtn iconbtn--dark" aria-label="Zurück zur Liste">←</button>
       <button type="button" id="btnRestart" class="iconbtn iconbtn--dark" aria-label="Zurück zum Anfang">⤒</button>
@@ -254,12 +262,6 @@
       <button type="button" id="btnSlower" class="iconbtn iconbtn--dark" aria-label="Langsamer">−</button>
       <output id="outSpeedLive" class="speedlive">130</output>
       <button type="button" id="btnFaster" class="iconbtn iconbtn--dark" aria-label="Schneller">＋</button>
-    </div>
-
-    <div class="controls__row controls__row--main">
-      <button type="button" id="btnRecStart" class="btn btn--rec">● Aufnahme + Prompter</button>
-      <button type="button" id="btnPlayOnly" class="btn btn--ghost btn--small">▶ Nur Prompter</button>
-      <button type="button" id="btnRecStop" class="btn btn--stop is-hidden">■ Stopp &amp; speichern</button>
     </div>
   </div>
 
