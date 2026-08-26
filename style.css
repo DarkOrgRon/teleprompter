@@ -125,6 +125,8 @@ body { position: fixed; inset: 0; }
   touch-action: manipulation;
 }
 .btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn:disabled:active { transform: none; }
 
 .btn--primary { background: var(--green); color: #10230a; }
 .btn--ghost { background: transparent; border-color: var(--line); color: var(--text); }

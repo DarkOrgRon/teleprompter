@@ -105,6 +105,7 @@
     finished: false
   };
 
+  var cameraState = 'starting'; // starting | ready | failed
   var wakeLock = null;
   var timerHandle = 0;
   var fadeHandle = 0;
@@ -721,6 +722,7 @@
     el.promptBody.textContent = record.body || '';
     hideNotice();
     applyPromptStyles();
+    cameraState = 'starting';
     setRecordingUi(false);
     el.recTimer.textContent = '00:00';
     longRecordWarned = false;
@@ -742,8 +744,9 @@
 
   function openCamera() {
     if (!TPRecorder.isSupported()) {
+      cameraState = 'failed';
+      setRecordingUi(false);
       el.micLabel.textContent = '🎤 Aufnahme nicht möglich';
-      el.btnRecStart.classList.add('is-hidden');
       showNotice('Dieser Browser unterstützt keine Videoaufnahme.\nDer Prompter funktioniert trotzdem – tippe auf „Nur Prompter“.');
       return;
     }
@@ -765,10 +768,16 @@
       el.micLabel.textContent = '🎤 ' + info.micLabel +
                                 (info.resolution ? ' · ' + info.resolution : '') +
                                 ' · ' + format;
+
+      // Erst jetzt ist die Kamera bereit – Aufnahme-Knopf freischalten
+      cameraState = 'ready';
+      setRecordingUi(false);
+
       if (info.warning) toast(info.warning, 6000);
     }).catch(function (err) {
+      cameraState = 'failed';
+      setRecordingUi(false);
       el.micLabel.textContent = '🎤 kein Zugriff';
-      el.btnRecStart.classList.add('is-hidden');
       showNotice(TPRecorder.explainError(err) + '\n\nDer Prompter funktioniert auch ohne Kamera – tippe auf „Nur Prompter“.');
     });
   }
@@ -788,6 +797,8 @@
       }
     }
     pauseScroll();
+    cameraState = 'failed';
+    setRecordingUi(false);
     el.micLabel.textContent = '🎤 Verbindung verloren';
   }
 
@@ -816,12 +827,31 @@
      Aufnahme
      ============================================================ */
 
+  /**
+   * Zeigt den Aufnahmebereich passend zum Zustand.
+   * Der Aufnahme-Knopf bleibt immer sichtbar und zeigt selbst an, ob die
+   * Kamera bereit ist – ein versteckter Knopf laesst den Nutzer sonst
+   * vergeblich suchen.
+   */
   function setRecordingUi(active) {
     el.recDot.classList.toggle('is-hidden', !active);
     el.recTimer.classList.toggle('is-hidden', !active);
     el.btnRecStop.classList.toggle('is-hidden', !active);
-    el.btnRecStart.classList.toggle('is-hidden', active || !TPRecorder.hasStream());
+    el.btnRecStart.classList.toggle('is-hidden', active);
     el.btnPlayOnly.classList.toggle('is-hidden', active);
+
+    if (active) return;
+
+    if (cameraState === 'ready') {
+      el.btnRecStart.disabled = false;
+      el.btnRecStart.textContent = '● Aufnahme + Prompter';
+    } else if (cameraState === 'starting') {
+      el.btnRecStart.disabled = true;
+      el.btnRecStart.textContent = '● Kamera wird gestartet …';
+    } else {
+      el.btnRecStart.disabled = true;
+      el.btnRecStart.textContent = '● Aufnahme nicht möglich';
+    }
   }
 
   function startTimer() {
@@ -1054,12 +1084,29 @@
       'und Texte, Einstellungen und Aufnahmen bleiben auf diesem Gerät.';
   }
 
+  var reloadPending = false;
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
+
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').catch(function () {
         // Offline-Betrieb ist dann nicht verfuegbar, die App laeuft trotzdem
       });
+    });
+
+    // Neue Fassung uebernimmt: App neu laden, damit das Update wirklich ankommt.
+    // Waehrend einer Aufnahme oder im Prompter wird nicht neu geladen –
+    // das wuerde eine laufende Aufnahme zerstoeren.
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloadPending) return;
+      var busy = el.screens.prompter.classList.contains('is-active') || TPRecorder.isRecording();
+      if (busy) {
+        toast('Eine neue Fassung der App ist bereit. Sie wird beim nächsten Start aktiv.', 6000);
+        return;
+      }
+      reloadPending = true;
+      window.location.reload();
     });
   }
 
