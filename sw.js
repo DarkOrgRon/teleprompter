@@ -7,7 +7,7 @@
 
 /* Bei jeder Aktualisierung der App hochzaehlen,
    damit Geraete die neue Fassung sicher erhalten. */
-var CACHE_NAME = 'teleprompter-v1';
+var CACHE_NAME = 'teleprompter-v2';
 
 var PRECACHE = [
   './',
