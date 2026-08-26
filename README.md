@@ -39,6 +39,12 @@ Unter jedem Titel stehen Wortzahl und geschätzte Sprechzeit.
 Nach dem Countdown läuft die Aufnahme und der Text beginnt zu scrollen.
 Am Ende **„■ Stopp & speichern"** – das Video landet in den Downloads.
 
+Der Aufnahme-Knopf zeigt seinen Zustand selbst an: kurz nach dem Öffnen steht dort
+**„Kamera wird gestartet …"** (noch nicht tippbar), nach ein bis zwei Sekunden
+**„● Aufnahme + Prompter"**. Bleibt er auf **„Aufnahme nicht möglich"**, fehlt die
+Berechtigung für Kamera oder Mikrofon – der eingeblendete Hinweis erklärt dann, wo sie
+erteilt wird. Während der Aufnahme laufen oben links ein roter Punkt und ein Timer.
+
 Über den Text tippen = **Pause / Weiter**. Mit **−** und **＋** wird das Tempo im Lauf verändert,
 **⤒** springt zurück zum Anfang. Ohne Aufnahme läuft der Prompter über **„▶ Nur Prompter"**.
 
@@ -83,5 +89,7 @@ Welches Format aktiv ist, steht in den Einstellungen unter „Diese App".
 
 ### Nach einer Änderung
 
-In `sw.js` die Zeile `var CACHE_NAME = 'teleprompter-v1';` hochzählen (`-v2`, `-v3`, …),
-sonst behalten die Geräte die alte Fassung im Zwischenspeicher.
+In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v2`, `-v3`, …), sonst behalten die
+Geräte die alte Fassung im Zwischenspeicher. Übernimmt die neue Fassung die Kontrolle,
+lädt die App sich selbst neu – außer im Prompter oder während einer laufenden Aufnahme,
+weil ein Neuladen die Aufnahme zerstören würde.
