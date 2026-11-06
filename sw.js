@@ -5,17 +5,19 @@
    Verbindung zu fremden Servern.
    ============================================================ */
 
-/* Bei jeder Aktualisierung der App hochzaehlen,
-   damit Geraete die neue Fassung sicher erhalten. */
-var CACHE_NAME = 'teleprompter-v4';
+/* Bei jeder Aktualisierung der App hochzaehlen, damit Geraete die neue
+   Fassung sicher erhalten – und GLEICHZEITIG die Kennung ?v= an Stylesheet
+   und Skripten in index.html auf denselben Wert setzen. */
+var CACHE_NAME = 'teleprompter-v5';
 
 var PRECACHE = [
   './',
   'index.html',
-  'style.css',
-  'js/store.js',
-  'js/recorder.js',
-  'js/app.js',
+  'style.css?v=5',
+  'js/store.js?v=5',
+  'js/recorder.js?v=5',
+  'js/backup.js?v=5',
+  'js/app.js?v=5',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',

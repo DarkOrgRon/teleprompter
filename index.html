@@ -12,7 +12,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="style.css">
+<!-- ?v= gemeinsam mit CACHE_NAME in sw.js hochzaehlen: so laufen nach einem
+     Update nie neue Seite und alte Skripte aus dem Zwischenspeicher zusammen -->
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -30,6 +32,15 @@
       Noch kein Text vorhanden.<br>
       Tippe unten auf <strong>Neuer Text</strong>, um anzufangen.
     </p>
+
+    <div id="rescueBox" class="card card--alert is-hidden">
+      <h2 class="card__title">Unterbrochene Aufnahme gefunden</h2>
+      <p class="card__text">
+        Eine Aufnahme wurde nicht regulär beendet (z. B. App geschlossen oder abgestürzt).
+        Die Sicherungskopie liegt noch auf diesem Gerät.
+      </p>
+      <ul id="rescueList" class="rescuelist"></ul>
+    </div>
 
     <ul id="textList" class="textlist"></ul>
 
@@ -157,6 +168,17 @@
     </label>
 
     <label class="field">
+      <span class="field__label">Vorlauf beim Fortsetzen nach einer Pause</span>
+      <select id="setResumeDelay" class="input select">
+        <option value="0">Sofort weiter</option>
+        <option value="1">1 Sekunde</option>
+        <option value="2">2 Sekunden</option>
+        <option value="3">3 Sekunden</option>
+      </select>
+      <span class="hint">Nach „Weiter“ läuft ein kurzer Zähler, damit du den ersten Satz schon lesen und neu ansetzen kannst. Die Aufnahme selbst läuft während der Pause weiter.</span>
+    </label>
+
+    <label class="field">
       <span class="field__label">Bildschirm-Ausrichtung</span>
       <select id="setOrientation" class="input select">
         <option value="portrait">Hochformat</option>
@@ -178,18 +200,36 @@
 
     <h2 class="section">Kamera &amp; Ton</h2>
 
+    <label class="field">
+      <span class="field__label">Selbstbild</span>
+      <select id="setPreviewMode" class="input select">
+        <option value="full">Vollbild hinter dem Text (empfohlen)</option>
+        <option value="medium">Mittleres Bild in der Ecke</option>
+        <option value="small">Kleines Bild in der Ecke</option>
+        <option value="off">Aus</option>
+      </select>
+      <span class="hint">Im Vollbild siehst du genau den Bildausschnitt, der aufgenommen wird – so erkennst du, ob ein gezeigter Gegenstand richtig im Bild ist. Text und Knöpfe erscheinen nicht im Video.</span>
+    </label>
+
     <div class="switchrow">
       <label class="switch">
-        <input type="checkbox" id="setPreview">
-        <span>Selbstbild einblenden</span>
+        <input type="checkbox" id="setMirrorSelf">
+        <span>Selbstbild spiegeln</span>
       </label>
+      <span class="hint">An: wie ein Spiegel, gewohntes Gefühl. Aus: Schrift auf gezeigten Produkten ist lesbar wie im fertigen Video. Die Aufnahme selbst wird nie gespiegelt.</span>
+    </div>
+
+    <div class="field">
+      <span class="field__label">Kamerabild abdunkeln <output id="outCamDim" class="out">40 %</output></span>
+      <input type="range" id="setCamDim" class="range" min="0" max="80" step="5">
+      <span class="hint">Nur im Vollbild. Mehr Abdunkelung = Text besser lesbar, weniger = du siehst dich deutlicher.</span>
     </div>
 
     <label class="field">
-      <span class="field__label">Größe des Selbstbildes</span>
-      <select id="setPreviewSize" class="input select">
-        <option value="small">Klein</option>
-        <option value="medium">Mittel</option>
+      <span class="field__label">Textbereich im Vollbild</span>
+      <select id="setTextArea" class="input select">
+        <option value="top">Oberer Bereich – mehr Sicht auf dich</option>
+        <option value="full">Ganzer Bildschirm</option>
       </select>
     </label>
 
@@ -231,14 +271,16 @@
 <!-- ==================== Screen: Prompter ==================== -->
 <section id="screen-prompter" class="screen screen--black">
 
+  <!-- Kamerabild: als Vollbild hinter dem Text oder als kleines Bild in der Ecke -->
+  <video id="selfview" class="selfview" autoplay muted playsinline></video>
+  <div id="camDim" class="camdim" aria-hidden="true"></div>
+
   <div id="promptViewport" class="viewport">
     <div id="promptScroller" class="scroller">
       <div id="promptBody" class="prompttext"></div>
     </div>
     <div id="promptMarker" class="marker" aria-hidden="true"></div>
   </div>
-
-  <video id="selfview" class="selfview" autoplay muted playsinline></video>
 
   <div id="statusbar" class="statusbar">
     <span id="recDot" class="recdot is-hidden" aria-hidden="true"></span>
@@ -247,15 +289,24 @@
   </div>
 
   <div id="promptControls" class="controls">
+    <!-- Zurueckspringen: nur sichtbar, solange der Text angehalten ist -->
+    <div id="rewindRow" class="controls__row controls__row--rewind is-hidden">
+      <button type="button" id="btnBackPara" class="btn btn--jump">↑ Absatz</button>
+      <button type="button" id="btnBackSentence" class="btn btn--jump">↑ Satz</button>
+      <button type="button" id="btnBackLine" class="btn btn--jump">↑ Zeile</button>
+      <button type="button" id="btnFwdLine" class="btn btn--jump">↓ Zeile</button>
+    </div>
+
     <!-- Startzeile bewusst oben: bleibt frei von Systemhinweisen und der
          Gestenleiste am unteren Bildschirmrand -->
     <div class="controls__row controls__row--main">
+      <button type="button" id="btnPause" class="btn btn--pause is-hidden">⏸ Text anhalten</button>
       <button type="button" id="btnRecStart" class="btn btn--rec">● Aufnahme + Prompter</button>
       <button type="button" id="btnPlayOnly" class="btn btn--ghost btn--small">▶ Nur Prompter</button>
       <button type="button" id="btnRecStop" class="btn btn--stop is-hidden">■ Stopp &amp; speichern</button>
     </div>
 
-    <div class="controls__row">
+    <div class="controls__row controls__row--nav">
       <button type="button" id="btnPrompterBack" class="iconbtn iconbtn--dark" aria-label="Zurück zur Liste">←</button>
       <button type="button" id="btnRestart" class="iconbtn iconbtn--dark" aria-label="Zurück zum Anfang">⤒</button>
       <span class="controls__spacer"></span>
@@ -266,8 +317,15 @@
   </div>
 
   <div id="countdown" class="countdown is-hidden"><span id="countdownNumber">3</span></div>
+  <div id="miniCountdown" class="minicountdown is-hidden" aria-live="polite"></div>
 
-  <div id="promptNotice" class="notice is-hidden"></div>
+  <div id="promptNotice" class="notice is-hidden">
+    <div id="noticeText" class="notice__text"></div>
+    <div id="noticeActions" class="notice__actions is-hidden">
+      <button type="button" id="btnShare" class="btn btn--primary btn--small is-hidden">Teilen …</button>
+      <button type="button" id="btnNoticeClose" class="btn btn--ghost btn--small">Schließen</button>
+    </div>
+  </div>
 </section>
 
 <!-- ==================== Dialog: Bestätigung ==================== -->
@@ -284,8 +342,9 @@
 
 <div id="toast" class="toast is-hidden" role="status" aria-live="polite"></div>
 
-<script src="js/store.js"></script>
-<script src="js/recorder.js"></script>
-<script src="js/app.js"></script>
+<script src="js/store.js?v=5"></script>
+<script src="js/recorder.js?v=5"></script>
+<script src="js/backup.js?v=5"></script>
+<script src="js/app.js?v=5"></script>
 </body>
 </html>

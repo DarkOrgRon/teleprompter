@@ -25,8 +25,10 @@ var TPRecorder = (function () {
   var chunks = [];
   var activeMime = '';
   var startedAt = 0;
-  var handlers = {};       // { onStreamLost, onError }
+  var handlers = {};       // { onStreamLost, onError, onChunk }
   var trackWatchers = [];
+  var stopping = null;     // laufender Stopp – ein zweiter Aufruf wartet auf denselben
+  var openToken = 0;       // verhindert offene Streams bei schnellem Verlassen/Neuoeffnen
 
   /* ---------- Faehigkeiten ---------- */
 
@@ -122,6 +124,7 @@ var TPRecorder = (function () {
   function open(settings) {
     close();
 
+    var token = ++openToken;
     var wantsSpecificMic = !!settings.micId;
 
     return navigator.mediaDevices.getUserMedia({
@@ -144,6 +147,15 @@ var TPRecorder = (function () {
         return fallbackStream;
       });
     }).then(function (openedStream) {
+      if (token !== openToken) {
+        // Inzwischen wurde close() oder ein neues open() aufgerufen: diesen Stream sofort freigeben
+        openedStream.getTracks().forEach(function (t) {
+          try { t.stop(); } catch (err) { /* ignorieren */ }
+        });
+        var stale = new Error('Veralteter Kamerastart');
+        stale.name = 'StaleOpenError';
+        throw stale;
+      }
       stream = openedStream;
       watchTracks();
       return describe(openedStream.__tpWarning || '');
@@ -196,6 +208,7 @@ var TPRecorder = (function () {
   }
 
   function close() {
+    openToken += 1;
     stopRecordingSilently();
     clearWatchers();
     if (stream) {
@@ -225,12 +238,17 @@ var TPRecorder = (function () {
    */
   function startRecording() {
     if (!stream) throw new Error('Kamera ist nicht geöffnet.');
-    if (isRecording()) return { mimeType: activeMime, formatName: shortFormatName(activeMime) };
+    if (isRecording()) return { mimeType: activeMime, formatName: shortFormatName(activeMime), extension: extensionFor(activeMime) };
 
     var mime = pickMimeType();
     var options = {
       videoBitsPerSecond: 10000000,   // ca. 10 Mbit/s – gut fuer 1080p
-      audioBitsPerSecond: 128000
+      audioBitsPerSecond: 128000,
+      // Ein Schluesselbild pro Sekunde: Chrome liefert MP4-Daten nur an
+      // Schluesselbildern aus. So kommen die Haeppchen wirklich sekuendlich
+      // (wichtig fuer die Sicherungskopie), und der Schnitt findet ueberall
+      // saubere Schnittpunkte. Browser ohne diese Option ignorieren sie.
+      videoKeyFrameIntervalDuration: 1000
     };
     if (mime) options.mimeType = mime;
 
@@ -245,8 +263,17 @@ var TPRecorder = (function () {
 
     activeMime = recorder.mimeType || mime || '';
 
+    var seq = 0;
     recorder.ondataavailable = function (event) {
-      if (event.data && event.data.size > 0) chunks.push(event.data);
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+        // Zusaetzliche Sicherungskopie (siehe backup.js) – Fehler dort
+        // duerfen die Aufnahme nie stoeren.
+        if (handlers.onChunk) {
+          try { handlers.onChunk(event.data, seq); } catch (err) { /* ignorieren */ }
+        }
+        seq += 1;
+      }
     };
     recorder.onerror = function (event) {
       if (handlers.onError) {
@@ -255,35 +282,55 @@ var TPRecorder = (function () {
     };
 
     // Haeppchenweise aufnehmen: lange Aufnahmen scheitern so nicht an einem Riesen-Block
-    recorder.start(1000);
+    try {
+      recorder.start(1000);
+    } catch (err) {
+      // z. B. Spur bereits beendet: keinen halb gestarteten Rekorder zuruecklassen
+      recorder = null;
+      throw err;
+    }
     startedAt = Date.now();
 
-    return { mimeType: activeMime, formatName: shortFormatName(activeMime) };
+    return { mimeType: activeMime, formatName: shortFormatName(activeMime), extension: extensionFor(activeMime) };
   }
 
   /** Beendet die Aufnahme und liefert die Datei. */
+  /**
+   * Beendet die Aufnahme und liefert die Datei. Wartet auf das letzte
+   * Haeppchen ("stop" kommt erst nach dem letzten "dataavailable").
+   * Mehrfache Aufrufe (Doppeltipp, Stream-Abbruch auf zwei Spuren)
+   * erhalten dasselbe Ergebnis – es entsteht nie eine zweite Teildatei.
+   */
   function stopRecording() {
-    return new Promise(function (resolve) {
-      if (!recorder) {
-        resolve(buildResult());
-        return;
-      }
-      if (recorder.state === 'inactive') {
-        recorder = null;
-        resolve(buildResult());
-        return;
-      }
-      recorder.onstop = function () {
-        recorder = null;
-        resolve(buildResult());
-      };
-      try {
-        recorder.stop();
-      } catch (err) {
-        recorder = null;
+    if (stopping) return stopping;
+    if (!recorder) return Promise.resolve(buildResult());
+
+    var rec = recorder;
+    stopping = new Promise(function (resolve) {
+      var done = false;
+      function finish() {
+        if (done) return;
+        done = true;
+        if (recorder === rec) recorder = null;
+        stopping = null;
         resolve(buildResult());
       }
+      rec.addEventListener('stop', function () { window.setTimeout(finish, 0); });
+      if (rec.state !== 'inactive') {
+        try {
+          rec.stop();
+        } catch (err) {
+          finish();
+        }
+      } else {
+        // Hat sich bereits selbst beendet (z. B. Spur weggefallen):
+        // kurz auf ausstehende Daten warten
+        window.setTimeout(finish, 1500);
+      }
+      // Sicherheitsnetz, falls der Browser "stop" nie meldet
+      window.setTimeout(finish, 8000);
     });
+    return stopping;
   }
 
   /** Beendet die Aufnahme ohne auf Daten zu warten (beim Aufraeumen). */
@@ -313,11 +360,6 @@ var TPRecorder = (function () {
     };
   }
 
-  /** Rettet bereits aufgenommene Daten, wenn der Stream abgebrochen ist. */
-  function rescue() {
-    stopRecordingSilently();
-    return buildResult();
-  }
 
   function elapsedSeconds() {
     if (!startedAt) return 0;
@@ -390,11 +432,11 @@ var TPRecorder = (function () {
     hasStream: hasStream,
     startRecording: startRecording,
     stopRecording: stopRecording,
-    rescue: rescue,
     isRecording: isRecording,
     hasPendingData: hasPendingData,
     elapsedSeconds: elapsedSeconds,
     saveBlob: saveBlob,
+    buildFileName: buildFileName,
     setHandlers: setHandlers,
     explainError: explainError
   };

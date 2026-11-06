@@ -21,8 +21,11 @@ var TPStore = (function () {
     countdown: 3,       // Sekunden
     mirrorH: false,
     mirrorV: false,
-    preview: true,
-    previewSize: 'small', // small | medium
+    previewMode: 'full',  // off | small | medium | full (Kamerabild hinter dem Text)
+    mirrorSelf: true,     // Selbstbild wie ein Spiegel anzeigen (Aufnahme bleibt ungespiegelt)
+    camDim: 40,           // Prozent Abdunkelung des Kamerabildes im Vollbild
+    textArea: 'top',      // full | top – Textbereich im Vollbild
+    resumeDelay: 2,       // Sekunden Vorlauf beim Fortsetzen nach einer Pause
     micId: '',
     audioFilters: false,
     orientation: 'portrait' // portrait | landscape
@@ -90,12 +93,27 @@ var TPStore = (function () {
 
   function loadSettings() {
     var stored = read(SETTINGS_KEY, {});
+    if (!stored || typeof stored !== 'object') stored = {};
     var result = {};
     for (var key in DEFAULT_SETTINGS) {
       if (Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) {
         result[key] = Object.prototype.hasOwnProperty.call(stored, key) ? stored[key] : DEFAULT_SETTINGS[key];
       }
     }
+    // Umstieg von Version 1.0: "preview" (an/aus) + "previewSize" -> "previewMode".
+    // Wer das Selbstbild aus hatte, behaelt es aus; sonst gilt das neue Vollbild.
+    if (!Object.prototype.hasOwnProperty.call(stored, 'previewMode') &&
+        Object.prototype.hasOwnProperty.call(stored, 'preview') && stored.preview === false) {
+      result.previewMode = 'off';
+    }
+    if (['off', 'small', 'medium', 'full'].indexOf(result.previewMode) === -1) {
+      result.previewMode = DEFAULT_SETTINGS.previewMode;
+    }
+    if (['full', 'top'].indexOf(result.textArea) === -1) result.textArea = DEFAULT_SETTINGS.textArea;
+    var dim = parseInt(result.camDim, 10);
+    result.camDim = isNaN(dim) ? DEFAULT_SETTINGS.camDim : Math.min(80, Math.max(0, dim));
+    var delay = parseInt(result.resumeDelay, 10);
+    result.resumeDelay = isNaN(delay) ? DEFAULT_SETTINGS.resumeDelay : Math.min(3, Math.max(0, delay));
     return result;
   }
 

@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.0.0';
+  var APP_VERSION = '1.1.0';
 
   /* ---------- Elemente ---------- */
 
@@ -24,6 +24,8 @@
     btnNewText: $('btnNewText'),
     btnOpenSettings: $('btnOpenSettings'),
     btnExport: $('btnExport'),
+    rescueBox: $('rescueBox'),
+    rescueList: $('rescueList'),
     btnImport: $('btnImport'),
     fileImport: $('fileImport'),
     // Editor
@@ -51,8 +53,12 @@
     setOrientation: $('setOrientation'),
     setMirrorH: $('setMirrorH'),
     setMirrorV: $('setMirrorV'),
-    setPreview: $('setPreview'),
-    setPreviewSize: $('setPreviewSize'),
+    setPreviewMode: $('setPreviewMode'),
+    setMirrorSelf: $('setMirrorSelf'),
+    setCamDim: $('setCamDim'),
+    outCamDim: $('outCamDim'),
+    setTextArea: $('setTextArea'),
+    setResumeDelay: $('setResumeDelay'),
     setMic: $('setMic'),
     micHint: $('micHint'),
     btnScanMics: $('btnScanMics'),
@@ -65,6 +71,7 @@
     promptBody: $('promptBody'),
     marker: $('promptMarker'),
     selfview: $('selfview'),
+    camDim: $('camDim'),
     recDot: $('recDot'),
     recTimer: $('recTimer'),
     micLabel: $('micLabel'),
@@ -77,9 +84,20 @@
     btnRecStart: $('btnRecStart'),
     btnPlayOnly: $('btnPlayOnly'),
     btnRecStop: $('btnRecStop'),
+    btnPause: $('btnPause'),
+    rewindRow: $('rewindRow'),
+    btnBackPara: $('btnBackPara'),
+    btnBackSentence: $('btnBackSentence'),
+    btnBackLine: $('btnBackLine'),
+    btnFwdLine: $('btnFwdLine'),
     countdown: $('countdown'),
     countdownNumber: $('countdownNumber'),
+    miniCountdown: $('miniCountdown'),
     notice: $('promptNotice'),
+    noticeText: $('noticeText'),
+    noticeActions: $('noticeActions'),
+    btnShare: $('btnShare'),
+    btnNoticeClose: $('btnNoticeClose'),
     // Dialog / Toast
     confirmLayer: $('confirmLayer'),
     confirmTitle: $('confirmTitle'),
@@ -102,7 +120,8 @@
     pxPerSecond: 0,
     lastFrame: 0,
     raf: 0,
-    finished: false
+    finished: false,
+    started: false   // Text wurde seit dem Oeffnen mindestens einmal gestartet
   };
 
   var cameraState = 'starting'; // starting | ready | failed
@@ -112,6 +131,14 @@
   var toastHandle = 0;
   var longRecordWarned = false;
   var countdownAbort = false;
+  var countdownRunning = false;
+  var countdownToken = 0;     // jeder Countdown hat eine Nummer – alte Zaehler laufen ins Leere
+  var stopInProgress = null;  // laufendes "Stopp & speichern" (gegen Doppeltipp)
+  var lossHandled = false;    // Stream-Abbruch nur einmal behandeln
+  var leaving = false;        // Prompter wird gerade verlassen
+  var prerollHandle = 0;      // Vorlauf beim Fortsetzen nach einer Pause
+  var backupId = null;        // Kennung der laufenden Sicherungskopie
+  var lastRecording = null;   // { blob, fileName, mimeType } fuer den Teilen-Knopf
 
   /* ============================================================
      Kleine Helfer: Toast und Bestaetigungsdialog
@@ -153,19 +180,28 @@
     if (event.target === el.confirmLayer) closeConfirm(false);
   });
 
-  function showNotice(html) {
-    el.notice.textContent = '';
-    var lines = String(html).split('\n');
+  /** Zeigt einen Hinweis im Prompter. options.share: Teilen-Knopf anbieten. */
+  function showNotice(text, options) {
+    el.noticeText.textContent = '';
+    var lines = String(text).split('\n');
     lines.forEach(function (line, index) {
-      if (index > 0) el.notice.appendChild(document.createElement('br'));
-      el.notice.appendChild(document.createTextNode(line));
+      if (index > 0) el.noticeText.appendChild(document.createElement('br'));
+      el.noticeText.appendChild(document.createTextNode(line));
     });
+    var share = !!(options && options.share);
+    el.btnShare.classList.toggle('is-hidden', !share);
+    el.noticeActions.classList.remove('is-hidden');
     el.notice.classList.remove('is-hidden');
   }
 
   function hideNotice() {
     el.notice.classList.add('is-hidden');
   }
+
+  el.btnNoticeClose.addEventListener('click', function (event) {
+    event.stopPropagation();
+    hideNotice();
+  });
 
   /* ============================================================
      Bildschirmwechsel
@@ -362,8 +398,11 @@
     el.setOrientation.value = settings.orientation;
     el.setMirrorH.checked = !!settings.mirrorH;
     el.setMirrorV.checked = !!settings.mirrorV;
-    el.setPreview.checked = !!settings.preview;
-    el.setPreviewSize.value = settings.previewSize;
+    el.setPreviewMode.value = settings.previewMode;
+    el.setMirrorSelf.checked = !!settings.mirrorSelf;
+    el.setCamDim.value = settings.camDim;
+    el.setTextArea.value = settings.textArea;
+    el.setResumeDelay.value = String(settings.resumeDelay);
     el.setAudioFilters.checked = !!settings.audioFilters;
     updateSettingsOutputs();
   }
@@ -373,6 +412,7 @@
     el.outFontSize.textContent = settings.fontSize + ' px';
     el.outLineHeight.textContent = String(settings.lineHeight.toFixed(1)).replace('.', ',');
     el.outMargin.textContent = settings.margin + ' %';
+    el.outCamDim.textContent = settings.camDim + ' %';
   }
 
   function persistSettings() {
@@ -393,8 +433,14 @@
 
     el.marker.className = 'marker' + (settings.marker === 'off' ? '' : ' marker--' + settings.marker);
 
-    el.selfview.classList.toggle('is-hidden', !settings.preview);
-    el.selfview.classList.toggle('selfview--medium', settings.previewSize === 'medium');
+    root.setProperty('--cam-dim', String(Math.min(80, Math.max(0, settings.camDim)) / 100));
+
+    var mode = settings.previewMode;
+    el.screens.prompter.classList.toggle('screen--camfull', mode === 'full');
+    el.screens.prompter.classList.toggle('screen--textTop', mode === 'full' && settings.textArea === 'top');
+    el.selfview.classList.toggle('is-hidden', mode === 'off');
+    el.selfview.classList.toggle('selfview--medium', mode === 'medium');
+    el.selfview.classList.toggle('selfview--unmirrored', !settings.mirrorSelf);
   }
 
   function onSettingChanged(applyLayout) {
@@ -452,13 +498,25 @@
     settings.mirrorV = el.setMirrorV.checked;
     onSettingChanged(false);
   });
-  el.setPreview.addEventListener('change', function () {
-    settings.preview = el.setPreview.checked;
+  el.setPreviewMode.addEventListener('change', function () {
+    settings.previewMode = el.setPreviewMode.value;
+    onSettingChanged(true);
+  });
+  el.setMirrorSelf.addEventListener('change', function () {
+    settings.mirrorSelf = el.setMirrorSelf.checked;
     onSettingChanged(false);
   });
-  el.setPreviewSize.addEventListener('change', function () {
-    settings.previewSize = el.setPreviewSize.value;
+  el.setCamDim.addEventListener('input', function () {
+    settings.camDim = parseInt(el.setCamDim.value, 10) || 0;
     onSettingChanged(false);
+  });
+  el.setTextArea.addEventListener('change', function () {
+    settings.textArea = el.setTextArea.value;
+    onSettingChanged(true);
+  });
+  el.setResumeDelay.addEventListener('change', function () {
+    settings.resumeDelay = parseInt(el.setResumeDelay.value, 10) || 0;
+    persistSettings();
   });
   el.setAudioFilters.addEventListener('change', function () {
     settings.audioFilters = el.setAudioFilters.checked;
@@ -560,7 +618,8 @@
 
   function markerOffsetPx() {
     var height = el.viewport.clientHeight || window.innerHeight;
-    var factor = settings.markerPos === 'center' ? 0.5 : 0.22;
+    var topArea = settings.previewMode === 'full' && settings.textArea === 'top';
+    var factor = settings.markerPos === 'center' ? 0.5 : (topArea ? 0.3 : 0.22);
     return Math.round(height * factor);
   }
 
@@ -612,6 +671,7 @@
       applyScroll();
       pauseScroll();
       scroll.finished = true;
+      updateTransportUi(); // Knopf zeigt jetzt "⤒ Von vorn"
       showNotice(TPRecorder.isRecording()
         ? 'Ende des Textes erreicht.\nDie Aufnahme läuft weiter – tippe unten auf „Stopp & speichern“.'
         : 'Ende des Textes erreicht.\nTippe auf ⤒, um zum Anfang zurückzuspringen.');
@@ -624,22 +684,28 @@
   }
 
   function playScroll() {
+    cancelPreroll();
     if (scroll.running) return;
     if (scroll.finished) restartScroll();
     hideNotice();
     scroll.running = true;
+    scroll.started = true;
     scroll.lastFrame = 0;
     scroll.raf = window.requestAnimationFrame(frame);
     requestWakeLock();
+    updateTransportUi();
     scheduleFade();
   }
 
+  /** Haelt nur den Text an. Eine laufende Aufnahme laeuft bewusst weiter. */
   function pauseScroll() {
+    cancelPreroll();
     scroll.running = false;
     if (scroll.raf) {
       window.cancelAnimationFrame(scroll.raf);
       scroll.raf = 0;
     }
+    updateTransportUi();
     showControls();
   }
 
@@ -648,6 +714,213 @@
     scroll.finished = false;
     applyScroll();
     hideNotice();
+  }
+
+  /* ---------- Fortsetzen mit kurzem Vorlauf ---------- */
+
+  function cancelPreroll() {
+    if (prerollHandle) {
+      window.clearInterval(prerollHandle);
+      prerollHandle = 0;
+    }
+    el.miniCountdown.classList.add('is-hidden');
+  }
+
+  function isPrerolling() { return !!prerollHandle; }
+
+  /**
+   * Weiter nach einer Pause: ein kleiner Zaehler oben rechts gibt Zeit, den
+   * ersten Satz zu lesen und neu anzusetzen. Der Text bleibt dabei sichtbar.
+   */
+  function resumeWithPreroll() {
+    if (scroll.running || isPrerolling()) return;
+    var seconds = parseInt(settings.resumeDelay, 10) || 0;
+    // Am Textende heisst "weiter": von vorn – ebenfalls mit Vorlauf
+    if (scroll.finished) restartScroll();
+    if (seconds <= 0) {
+      playScroll();
+      return;
+    }
+    hideNotice();
+    var remaining = seconds;
+    el.miniCountdown.textContent = String(remaining);
+    el.miniCountdown.classList.remove('is-hidden');
+    prerollHandle = window.setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        cancelPreroll();
+        playScroll();
+      } else {
+        el.miniCountdown.textContent = String(remaining);
+      }
+    }, 1000);
+    updateTransportUi();
+  }
+
+  /** Pause/Weiter – fuer Knopf, Tippen und Tastatur. */
+  function togglePause() {
+    if (countdownRunning) return;
+    if (scroll.running) {
+      pauseScroll();
+    } else if (isPrerolling()) {
+      cancelPreroll();
+      updateTransportUi();
+    } else if (!scroll.started) {
+      playScroll();
+    } else {
+      resumeWithPreroll();
+    }
+  }
+
+  /* ---------- Zurueckspringen ---------- */
+
+  function lineHeightPx() {
+    return Math.max(1, settings.fontSize * settings.lineHeight);
+  }
+
+  /** Oberkanten (in px ab Textbeginn) aller Saetze bzw. Absaetze. */
+  function collectTops(selector) {
+    var base = el.promptBody.offsetTop;
+    var nodes = el.promptBody.querySelectorAll(selector);
+    var tops = [];
+    for (var i = 0; i < nodes.length; i++) {
+      tops.push({ top: nodes[i].offsetTop - base, node: nodes[i] });
+    }
+    return tops;
+  }
+
+  function flash(node) {
+    if (!node) return;
+    node.classList.add('is-flash');
+    window.setTimeout(function () { node.classList.remove('is-flash'); }, 450);
+  }
+
+  function jumpTo(y, node) {
+    var target = Math.max(0, Math.min(scroll.distance, y));
+    el.scroller.classList.add('is-jumping');
+    window.clearTimeout(jumpTo.handle);
+    jumpTo.handle = window.setTimeout(function () {
+      el.scroller.classList.remove('is-jumping');
+    }, 260);
+    scroll.y = target;
+    scroll.finished = false;
+    applyScroll();
+    hideNotice();
+    flash(node);
+    showControls();
+  }
+
+  /**
+   * Springt zum Anfang des aktuellen Satzes bzw. Absatzes. Wer nochmals
+   * tippt, landet beim vorherigen – so kann man mehrfach zurueckgehen.
+   */
+  function jumpBack(selector) {
+    if (scroll.running) pauseScroll();
+    cancelPreroll();
+    var lh = lineHeightPx();
+    var limit = scroll.y - lh * 0.5;
+    var tops = collectTops(selector);
+    var best = null;
+    for (var i = 0; i < tops.length; i++) {
+      // Auf Zeilenanfang einrasten, damit die Zeile genau an der Lesemarke steht
+      // Runden statt Abschneiden: bei engem Zeilenabstand liegt die Oberkante
+      // eines Satzes ein paar Pixel ueber der Zeile
+      var snapped = Math.round(tops[i].top / lh) * lh;
+      if (snapped < limit) best = { top: snapped, node: tops[i].node };
+    }
+    if (best) {
+      jumpTo(best.top, best.node);
+    } else {
+      jumpTo(0, tops.length ? tops[0].node : null);
+    }
+    updateTransportUi();
+  }
+
+  function jumpLines(count) {
+    if (scroll.running) pauseScroll();
+    cancelPreroll();
+    var lh = lineHeightPx();
+    var current = Math.round(scroll.y / lh);
+    jumpTo((current + count) * lh, null);
+    updateTransportUi();
+  }
+
+  /**
+   * Text fuer den Prompter aufbauen: jeder Satz in einem eigenen Element,
+   * damit die Zurueck-Knoepfe Satz- und Absatzanfaenge finden. Der Text
+   * selbst bleibt unveraendert (Zeilenumbrueche, Leerzeilen).
+   */
+  function renderPromptText(body) {
+    el.promptBody.textContent = '';
+    var text = String(body || '');
+    if (!text) return;
+
+    var starts = {};   // Index -> 'para' | 'sent'
+    var len = text.length;
+
+    function nextNonSpace(i) {
+      while (i < len && /\s/.test(text.charAt(i))) i++;
+      return i;
+    }
+
+    var first = nextNonSpace(0);
+    if (first < len) starts[first] = 'para';
+
+    // Absaetze: nach einer Leerzeile
+    var paraRe = /\n[ \t]*\n/g;
+    var m;
+    while ((m = paraRe.exec(text)) !== null) {
+      var p = nextNonSpace(m.index + m[0].length);
+      if (p < len) starts[p] = 'para';
+    }
+
+    // Saetze: nach . ! ? … (ggf. mit schliessenden Anfuehrungszeichen) oder nach einem Zeilenumbruch
+    var sentRe = /[.!?…]+["'»«“”„)\]]*\s+|\n+/g;
+    while ((m = sentRe.exec(text)) !== null) {
+      var q = nextNonSpace(m.index + m[0].length);
+      if (q < len && !starts[q]) starts[q] = 'sent';
+    }
+
+    var indices = Object.keys(starts).map(Number).sort(function (a, b) { return a - b; });
+    var frag = document.createDocumentFragment();
+    if (indices[0] > 0) frag.appendChild(document.createTextNode(text.slice(0, indices[0])));
+    for (var i = 0; i < indices.length; i++) {
+      var span = document.createElement('span');
+      span.className = starts[indices[i]] === 'para' ? 'tp-s tp-p' : 'tp-s';
+      span.textContent = text.slice(indices[i], i + 1 < indices.length ? indices[i + 1] : len);
+      frag.appendChild(span);
+    }
+    el.promptBody.appendChild(frag);
+  }
+
+  /* ---------- Bedienzeile passend zum Zustand ---------- */
+
+  /**
+   * Hauptzeile hat immer genau zwei Knoepfe nebeneinander (feste Plaetze):
+   *  - vor dem Start / nach dem Speichern: Aufnahme + Prompter | Nur Prompter
+   *  - waehrend der Aufnahme:              Pause/Weiter        | Stopp
+   *  - Prompter ohne Aufnahme gestartet:   Pause/Weiter        | Aufnahme + Prompter
+   */
+  function updateTransportUi() {
+    var recording = TPRecorder.isRecording();
+    var showPause = recording || scroll.started;
+    var stopped = !scroll.running && !isPrerolling();
+
+    el.btnPause.classList.toggle('is-hidden', !showPause);
+    el.btnPause.classList.toggle('is-paused', showPause && stopped);
+    if (isPrerolling()) {
+      el.btnPause.textContent = '✕ Vorlauf stoppen';
+    } else if (scroll.running) {
+      el.btnPause.textContent = '❚❚ Text anhalten';
+    } else if (scroll.finished) {
+      el.btnPause.textContent = '⤒ Von vorn';
+    } else {
+      el.btnPause.textContent = '▶ Weiter';
+    }
+    el.btnPlayOnly.classList.toggle('is-hidden', showPause);
+    // Spruenge immer anbieten, wenn der Text steht und nicht am Anfang ist
+    var canJump = stopped && countdownRunning === false && (scroll.started || scroll.y > 0);
+    el.rewindRow.classList.toggle('is-hidden', !canJump);
   }
 
   /* ---------- Bedienelemente ein-/ausblenden ---------- */
@@ -662,6 +935,71 @@
     fadeHandle = window.setTimeout(function () {
       if (scroll.running) el.controls.classList.add('is-faded');
     }, 3000);
+  }
+
+  /* ---------- Tippen und Wischen auf dem Text / Kamerabild ---------- */
+
+  var drag = null;
+  var DRAG_THRESHOLD = 10; // px – darunter zaehlt es als Tippen
+
+  function isControlTarget(target) {
+    return !!(target && target.closest &&
+              target.closest('.controls, .notice, .countdown, .statusbar, button'));
+  }
+
+  function onPointerDown(event) {
+    if (!el.screens.prompter.classList.contains('is-active')) return;
+    if (isControlTarget(event.target)) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    drag = { id: event.pointerId, startY: event.clientY, lastY: event.clientY, moved: false, target: event.currentTarget };
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch (err) { /* ignorieren */ }
+  }
+
+  function onPointerMove(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (!drag.moved && Math.abs(event.clientY - drag.startY) < DRAG_THRESHOLD) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      if (countdownRunning) return;
+      if (scroll.running) pauseScroll();
+      cancelPreroll();
+      updateTransportUi();
+      hideNotice();
+    }
+    if (countdownRunning) return;
+    // Finger nach unten = Text nach unten = zurueck. Bei vertikaler Spiegelung umgekehrt.
+    var direction = settings.mirrorV ? -1 : 1;
+    var dy = (event.clientY - drag.lastY) * direction;
+    drag.lastY = event.clientY;
+    scroll.y = Math.max(0, Math.min(scroll.distance, scroll.y - dy));
+    scroll.finished = false;
+    applyScroll();
+  }
+
+  function onPointerUp(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    var wasDrag = drag.moved;
+    drag = null;
+    if (!wasDrag) {
+      // Steht ein Hinweis (z. B. "Aufnahme gespeichert") offen, schliesst der
+      // erste Tipp nur den Hinweis – sonst wuerde der Text ungewollt starten.
+      if (!el.notice.classList.contains('is-hidden') && !scroll.running) {
+        hideNotice();
+        return;
+      }
+      togglePause();
+    } else {
+      // Nach dem Wischen auf einer Zeile einrasten
+      var lh = lineHeightPx();
+      scroll.y = Math.max(0, Math.min(scroll.distance, Math.round(scroll.y / lh) * lh));
+      applyScroll();
+      updateTransportUi();
+      showControls();
+    }
+  }
+
+  function onPointerCancel(event) {
+    if (drag && event.pointerId === drag.id) drag = null;
   }
 
   /* ---------- Wake Lock, Vollbild, Ausrichtung ---------- */
@@ -739,13 +1077,18 @@
     }
     currentText = record;
 
-    el.promptBody.textContent = record.body || '';
+    renderPromptText(record.body || '');
     hideNotice();
     applyPromptStyles();
+    scroll.started = false;
+    scroll.running = false;
+    lastRecording = null;
+    cancelPreroll();
     cameraState = 'starting';
     setRecordingUi(false);
     el.recTimer.textContent = '00:00';
     longRecordWarned = false;
+    updateTransportUi();
     showControls();
     showScreen('prompter');
     enterImmersive();
@@ -772,18 +1115,27 @@
     }
 
     el.micLabel.textContent = '🎤 Kamera wird gestartet …';
+    lossHandled = false;
 
     TPRecorder.setHandlers({
       onStreamLost: handleStreamLost,
       onError: function (err) {
         toast('Aufnahmefehler: ' + (err && err.message ? err.message : 'unbekannt'), 6000);
+      },
+      onChunk: function (blob, seq) {
+        if (backupId) TPBackup.addChunk(backupId, seq, blob);
       }
     });
 
     TPRecorder.open(settings).then(function (info) {
-      if (settings.preview && el.selfview) {
-        el.selfview.srcObject = info.stream;
+      // Leinwand immer verbinden – ob und wie das Bild erscheint, steuert die
+      // Einstellung "Selbstbild" (so wirkt ein Wechsel ohne Neustart der Kamera).
+      if (!el.screens.prompter.classList.contains('is-active')) {
+        // Prompter wurde verlassen, waehrend die Kamera noch startete
+        TPRecorder.close();
+        return;
       }
+      if (el.selfview) el.selfview.srcObject = info.stream;
       var format = TPRecorder.shortFormatName(TPRecorder.pickMimeType());
       el.micLabel.textContent = '🎤 ' + info.micLabel +
                                 (info.resolution ? ' · ' + info.resolution : '') +
@@ -795,6 +1147,7 @@
 
       if (info.warning) toast(info.warning, 6000);
     }).catch(function (err) {
+      if (err && err.name === 'StaleOpenError') return; // Prompter wurde inzwischen verlassen
       cameraState = 'failed';
       setRecordingUi(false);
       el.micLabel.textContent = '🎤 kein Zugriff';
@@ -803,33 +1156,51 @@
   }
 
   function handleStreamLost(kind) {
-    var wasRecording = TPRecorder.isRecording() || TPRecorder.hasPendingData();
-    if (wasRecording) {
-      var result = TPRecorder.rescue();
-      stopTimer();
-      setRecordingUi(false);
-      if (result.blob && result.blob.size > 0) {
-        var name = TPRecorder.saveBlob(result.blob, result.extension, currentText ? currentText.title : '');
-        showNotice('Die Aufnahme wurde unterbrochen (' + (kind === 'audio' ? 'Mikrofon' : 'Kamera') + ').\n' +
-                   'Das bereits Aufgenommene wurde gesichert: ' + name);
-      } else {
-        showNotice('Die Aufnahme wurde unterbrochen und es konnten keine Daten gesichert werden.');
-      }
-    }
+    // Fallen Kamera und Mikrofon kurz nacheinander weg, kommt das Ereignis
+    // zweimal – behandelt wird es nur einmal (sonst entstuende eine zweite Teildatei).
+    if (lossHandled) return;
+    lossHandled = true;
+
     pauseScroll();
     cameraState = 'failed';
-    setRecordingUi(false);
     el.micLabel.textContent = '🎤 Verbindung verloren';
+
+    var wasRecording = TPRecorder.isRecording() || TPRecorder.hasPendingData() || !!stopInProgress;
+    if (!wasRecording) {
+      setRecordingUi(false);
+      return;
+    }
+    // Laeuft bereits ein regulaerer Stopp, uebernimmt der das Speichern samt Hinweis
+    if (stopInProgress) return;
+    var title = currentText ? currentText.title : '';
+    TPRecorder.stopRecording().then(function (result) {
+      stopTimer();
+      setRecordingUi(false);
+      if (result && result.blob && result.blob.size > 0) {
+        var name = saveRecordingOnce(result, title);
+        showNotice('Die Aufnahme wurde unterbrochen (' + (kind === 'audio' ? 'Mikrofon' : 'Kamera') + ').\n' +
+                   'Das bereits Aufgenommene wurde gesichert: ' + name, { share: canShareRecording() });
+      } else {
+        // Sicherungskopie bleibt erhalten – sie wird beim naechsten Start angeboten
+        backupId = null;
+        showNotice('Die Aufnahme wurde unterbrochen und es konnten keine Daten gesichert werden.');
+      }
+    });
   }
 
   function leavePrompter() {
+    if (leaving) return;
+    leaving = true;
+    abortCountdown();
+    cancelPreroll();
     var finish = Promise.resolve();
 
-    if (TPRecorder.isRecording()) {
+    if (TPRecorder.isRecording() || stopInProgress) {
       finish = stopRecordingAndSave(true);
     }
 
     finish.then(function () {
+      leaving = false;
       pauseScroll();
       stopTimer();
       releaseWakeLock();
@@ -837,9 +1208,12 @@
       TPRecorder.close();
       if (el.selfview) el.selfview.srcObject = null;
       currentText = null;
+      lastRecording = null;
+      scroll.started = false;
       hideNotice();
       renderList();
       showScreen('list');
+      checkForRescue();
     });
   }
 
@@ -858,7 +1232,7 @@
     el.recTimer.classList.toggle('is-hidden', !active);
     el.btnRecStop.classList.toggle('is-hidden', !active);
     el.btnRecStart.classList.toggle('is-hidden', active);
-    el.btnPlayOnly.classList.toggle('is-hidden', active);
+    updateTransportUi();
 
     if (active) return;
 
@@ -893,26 +1267,42 @@
     }
   }
 
+  /** Bricht einen laufenden Countdown sofort ab. */
+  function abortCountdown() {
+    countdownAbort = true;
+    countdownToken += 1;
+    countdownRunning = false;
+    el.countdown.classList.add('is-hidden');
+  }
+
   function runCountdown() {
     var seconds = parseInt(settings.countdown, 10) || 0;
     countdownAbort = false;
+    var token = ++countdownToken;
     if (seconds <= 0) return Promise.resolve(true);
 
+    countdownRunning = true;
+    updateTransportUi();
     el.countdown.classList.remove('is-hidden');
     return new Promise(function (resolve) {
       var remaining = seconds;
       el.countdownNumber.textContent = String(remaining);
 
       var tick = window.setInterval(function () {
-        if (countdownAbort) {
+        // Abgebrochen oder durch einen neueren Countdown ersetzt
+        if (countdownAbort || token !== countdownToken) {
           window.clearInterval(tick);
-          el.countdown.classList.add('is-hidden');
+          if (token === countdownToken) {
+            countdownRunning = false;
+            el.countdown.classList.add('is-hidden');
+          }
           resolve(false);
           return;
         }
         remaining -= 1;
         if (remaining <= 0) {
           window.clearInterval(tick);
+          countdownRunning = false;
           el.countdown.classList.add('is-hidden');
           resolve(true);
         } else {
@@ -927,13 +1317,23 @@
       toast('Die Kamera ist nicht bereit.');
       return;
     }
+    if (countdownRunning || TPRecorder.isRecording() || stopInProgress) return;
     hideNotice();
-    restartScroll();
+    pauseScroll();
+    // Aufnahme beginnt an der aktuellen Textstelle – so kann man nach einem
+    // Take gezielt ab einem Absatz neu aufnehmen. ⤒ springt zum Anfang.
+    if (scroll.finished) restartScroll();
 
     runCountdown().then(function (proceed) {
-      if (!proceed) return;
+      if (!proceed || !TPRecorder.hasStream() || cameraState !== 'ready') {
+        updateTransportUi();
+        return;
+      }
       try {
         var info = TPRecorder.startRecording();
+        startBackup(info);
+        lastRecording = null;
+        longRecordWarned = false;
         setRecordingUi(true);
         startTimer();
         playScroll();
@@ -944,17 +1344,102 @@
     });
   }
 
+  /* ---------- Sicherungskopie waehrend der Aufnahme ---------- */
+
+  function startBackup(info) {
+    backupId = TPBackup.begin({
+      mime: info.mimeType,
+      extension: info.extension,
+      title: currentText ? currentText.title : ''
+    }, function () {
+      toast('Hinweis: Die Sicherungskopie konnte nicht angelegt werden (Speicher voll?). ' +
+            'Die Aufnahme läuft trotzdem weiter.', 7000);
+    });
+  }
+
+  function finishBackup() {
+    if (!backupId) return;
+    var id = backupId;
+    backupId = null;
+    TPBackup.finish(id);
+  }
+
+  /**
+   * Speichert ein Aufnahme-Ergebnis genau einmal. Erhalten Stopp-Knopf und
+   * Stream-Abbruch dasselbe Ergebnis, entsteht trotzdem nur eine Datei.
+   */
+  function saveRecordingOnce(result, title) {
+    if (!result.savedName) {
+      result.savedName = TPRecorder.saveBlob(result.blob, result.extension, title);
+      rememberRecording(result, result.savedName);
+      finishBackup();
+    }
+    return result.savedName;
+  }
+
+  /* ---------- Teilen ---------- */
+
+  function rememberRecording(result, fileName) {
+    lastRecording = { blob: result.blob, fileName: fileName, mimeType: result.mimeType || result.blob.type };
+  }
+
+  function recordingAsFile() {
+    if (!lastRecording || typeof window.File !== 'function') return null;
+    try {
+      return new File([lastRecording.blob], lastRecording.fileName, { type: lastRecording.mimeType });
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function canShareRecording() {
+    if (!navigator.share || !navigator.canShare) return false;
+    var file = recordingAsFile();
+    if (!file) return false;
+    try {
+      return navigator.canShare({ files: [file] });
+    } catch (err) {
+      return false;
+    }
+  }
+
+  el.btnShare.addEventListener('click', function (event) {
+    event.stopPropagation();
+    var file = recordingAsFile();
+    if (!file || !canShareRecording()) {
+      toast('Teilen ist auf diesem Gerät nicht möglich. Die Datei liegt in den Downloads.', 5000);
+      return;
+    }
+    // Teilen geschieht ausschliesslich ueber das Teilen-Menue des Geraets –
+    // die App selbst uebertraegt nichts.
+    navigator.share({ files: [file], title: lastRecording.fileName }).catch(function (err) {
+      if (err && err.name === 'AbortError') return; // abgebrochen
+      toast('Teilen hat nicht geklappt. Die Datei liegt in den Downloads.', 5000);
+    });
+  });
+
   function stopRecordingAndSave(silent) {
-    return TPRecorder.stopRecording().then(function (result) {
+    // Doppeltipp oder Verlassen waehrend des Speicherns: denselben Vorgang abwarten
+    if (stopInProgress) return stopInProgress;
+    var title = currentText ? currentText.title : '';
+    el.btnRecStop.disabled = true;
+    stopInProgress = TPRecorder.stopRecording().then(function (result) {
+      stopInProgress = null;
+      el.btnRecStop.disabled = false;
       stopTimer();
       setRecordingUi(false);
       pauseScroll();
+      // Zurueck in den Ausgangszustand: Aufnahme- und Prompter-Knopf an ihrem Platz,
+      // die Textstelle bleibt erhalten (neue Aufnahme startet dort).
+      scroll.started = false;
+      updateTransportUi();
 
       if (!result.blob || result.blob.size === 0) {
+        finishBackup();
         if (!silent) toast('Es wurden keine Videodaten aufgenommen.', 5000);
         return;
       }
-      var name = TPRecorder.saveBlob(result.blob, result.extension, currentText ? currentText.title : '');
+      var name = saveRecordingOnce(result, title);
       var message = 'Aufnahme gespeichert: ' + name + '\n' +
                     'Länge ' + TPStore.formatDuration(result.seconds) +
                     ' · ' + result.sizeMb + ' MB · ' + result.formatName + '\n' +
@@ -962,12 +1447,15 @@
       if (silent) {
         toast('Aufnahme gesichert: ' + name, 6000);
       } else {
-        showNotice(message);
+        showNotice(message, { share: canShareRecording() });
         showControls();
       }
     }).catch(function (err) {
+      stopInProgress = null;
+      el.btnRecStop.disabled = false;
       toast('Beim Speichern ist ein Fehler aufgetreten: ' + (err.message || 'unbekannt'), 6000);
     });
+    return stopInProgress;
   }
 
   /* ---------- Bedienelemente im Prompter ---------- */
@@ -979,10 +1467,12 @@
 
   el.btnPlayOnly.addEventListener('click', function (event) {
     event.stopPropagation();
+    if (countdownRunning) return;
     hideNotice();
-    restartScroll();
+    if (scroll.finished) restartScroll();
     runCountdown().then(function (proceed) {
       if (proceed) playScroll();
+      else updateTransportUi();
     });
   });
 
@@ -993,15 +1483,14 @@
 
   el.btnRestart.addEventListener('click', function (event) {
     event.stopPropagation();
-    restartScroll();
-    showControls();
+    cancelPreroll();
+    jumpTo(0, null);
+    updateTransportUi();
     if (scroll.running) scheduleFade();
   });
 
   el.btnPrompterBack.addEventListener('click', function (event) {
     event.stopPropagation();
-    countdownAbort = true;
-    el.countdown.classList.add('is-hidden');
     leavePrompter();
   });
 
@@ -1026,14 +1515,42 @@
     changeSpeed(-5);
   });
 
-  /** Tipp auf die Textfläche: Start/Pause und Bedienelemente einblenden. */
-  el.viewport.addEventListener('click', function () {
-    if (scroll.running) {
-      pauseScroll();
-    } else {
-      playScroll();
-    }
+  /* Tippen = Pause/Weiter, Wischen = Text verschieben. Gilt fuer die
+     Textflaeche und – im Vollbild – auch fuer das Kamerabild darunter. */
+  [el.viewport, el.selfview].forEach(function (target) {
+    target.addEventListener('pointerdown', onPointerDown);
+    target.addEventListener('pointermove', onPointerMove);
+    target.addEventListener('pointerup', onPointerUp);
+    target.addEventListener('pointercancel', onPointerCancel);
   });
+
+  el.btnPause.addEventListener('click', function (event) {
+    event.stopPropagation();
+    togglePause();
+  });
+  el.btnBackPara.addEventListener('click', function (event) {
+    event.stopPropagation();
+    jumpBack('.tp-p');
+  });
+  el.btnBackSentence.addEventListener('click', function (event) {
+    event.stopPropagation();
+    jumpBack('.tp-s');
+  });
+  el.btnBackLine.addEventListener('click', function (event) {
+    event.stopPropagation();
+    jumpLines(-1);
+  });
+  el.btnFwdLine.addEventListener('click', function (event) {
+    event.stopPropagation();
+    jumpLines(1);
+  });
+
+  /* Nach einem Tipp auf einen Knopf den Fokus loesen: sonst wuerde eine
+     Leertaste der Fernbedienung den Knopf ein zweites Mal ausloesen. */
+  el.screens.prompter.addEventListener('click', function (event) {
+    var button = event.target && event.target.closest ? event.target.closest('button') : null;
+    if (button && button.blur) button.blur();
+  }, true); // Erfassungsphase: die Knoepfe stoppen das Ereignis sonst vorher
 
   /* ---------- Tastatur / Bluetooth-Fernbedienung ---------- */
 
@@ -1041,28 +1558,45 @@
     if (!el.screens.prompter.classList.contains('is-active')) return;
     var tag = (event.target && event.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (!el.confirmLayer.classList.contains('is-hidden')) return;
+    if (countdownRunning && event.key !== 'Escape') return;
+    if (event.repeat) return; // gehaltene Taste nicht als Dauerfeuer werten
 
     switch (event.key) {
       case ' ':
       case 'Spacebar':
       case 'Enter':
       case 'MediaPlayPause':
+      case 'PageDown':     // typische Fernbedienung / Seitenwender: "weiter"
         event.preventDefault();
-        if (scroll.running) { pauseScroll(); } else { playScroll(); }
+        if (scroll.started || scroll.running) { togglePause(); } else { playScroll(); }
+        break;
+      case 'ArrowLeft':
+      case 'PageUp':       // typische Fernbedienung / Seitenwender: "zurueck"
+        event.preventDefault();
+        jumpBack('.tp-s');
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        jumpLines(1);
+        break;
+      case 'Backspace':
+        event.preventDefault();
+        jumpBack('.tp-p');
         break;
       case 'ArrowUp':
-      case 'PageUp':
         event.preventDefault();
         changeSpeed(5);
         break;
       case 'ArrowDown':
-      case 'PageDown':
         event.preventDefault();
         changeSpeed(-5);
         break;
       case 'Home':
         event.preventDefault();
-        restartScroll();
+        cancelPreroll();
+        jumpTo(0, null);
+        updateTransportUi();
         break;
       case 'Escape':
         event.preventDefault();
@@ -1087,7 +1621,7 @@
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' &&
         el.screens.prompter.classList.contains('is-active') &&
-        scroll.running) {
+        (scroll.running || TPRecorder.isRecording())) {
       requestWakeLock();
     }
   });
@@ -1102,6 +1636,80 @@
       'Aufnahmeformat auf diesem Gerät: ' + format + '. ' +
       'Diese App arbeitet vollständig offline: es werden keine Daten übertragen, ' +
       'und Texte, Einstellungen und Aufnahmen bleiben auf diesem Gerät.';
+  }
+
+  /* ---------- Unterbrochene Aufnahmen retten ---------- */
+
+  function checkForRescue() {
+    if (!TPBackup.isSupported() || TPRecorder.isRecording()) return;
+    TPBackup.listOrphans().then(function (orphans) {
+      el.rescueList.textContent = '';
+      // Nur Kopfdaten ohne Bild (Abbruch in der ersten Sekunde) sind nutzlos: still aufraeumen
+      var MIN_BYTES = 32768;
+      var usable = orphans.filter(function (o) { return o.bytes >= MIN_BYTES; });
+      orphans.forEach(function (o) { if (o.bytes < MIN_BYTES) TPBackup.discard(o.id); });
+
+      el.rescueBox.classList.toggle('is-hidden', usable.length === 0);
+      usable.forEach(function (o) {
+        var li = document.createElement('li');
+        var info = document.createElement('p');
+        info.className = 'card__text';
+        var mb = Math.round((o.bytes / 1048576) * 10) / 10;
+        var when = '';
+        try {
+          when = new Date(o.startedAt).toLocaleString('de-DE', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+        } catch (err) { when = ''; }
+        info.textContent = (o.title || 'Ohne Titel') + ' · ' + when + ' · ca. ' +
+                           TPStore.formatDuration(o.chunks) + ' · ' + mb + ' MB';
+        li.appendChild(info);
+
+        var actions = document.createElement('div');
+        actions.className = 'card__actions';
+        var save = document.createElement('button');
+        save.type = 'button';
+        save.className = 'btn btn--primary';
+        save.textContent = 'Speichern';
+        save.addEventListener('click', function () {
+          save.disabled = true;
+          TPBackup.restore(o.id).then(function (rec) {
+            if (!rec) {
+              toast('Die Sicherung ist leer und wurde entfernt.');
+              return TPBackup.discard(o.id);
+            }
+            var name = TPRecorder.saveBlob(rec.blob, rec.extension, rec.title);
+            toast('Gerettet: ' + name + ' (Ordner „Downloads“). Falls das Ende fehlt, ist das normal – ' +
+                  'die letzte Sekunde vor dem Abbruch konnte nicht mehr gesichert werden.', 9000);
+            // Erst nach dem Download-Start entfernen; kurz warten, damit er sicher angelaufen ist
+            return new Promise(function (resolve) {
+              window.setTimeout(function () { TPBackup.discard(o.id).then(resolve); }, 4000);
+            });
+          }).catch(function () {
+            toast('Die Sicherung konnte nicht gelesen werden.', 5000);
+          }).then(function () {
+            checkForRescue();
+          });
+        });
+        var drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'btn btn--ghost';
+        drop.textContent = 'Verwerfen';
+        drop.addEventListener('click', function () {
+          confirmDialog('Aufnahme verwerfen?',
+                        'Die gesicherte Aufnahme wird endgültig von diesem Gerät gelöscht.',
+                        'Verwerfen')
+            .then(function (yes) {
+              if (!yes) return null;
+              return TPBackup.discard(o.id).then(checkForRescue);
+            });
+        });
+        actions.appendChild(save);
+        actions.appendChild(drop);
+        li.appendChild(actions);
+        el.rescueList.appendChild(li);
+      });
+    });
   }
 
   var reloadPending = false;
@@ -1136,6 +1744,7 @@
     renderList();
     updateAbout();
     registerServiceWorker();
+    checkForRescue();
 
     // Bereits erteilte Berechtigung nutzen, um Mikrofonnamen ohne Zusatzklick zu zeigen
     if (navigator.permissions && navigator.permissions.query) {

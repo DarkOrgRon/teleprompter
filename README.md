@@ -45,11 +45,54 @@ Der Aufnahme-Knopf zeigt seinen Zustand selbst an: kurz nach dem Öffnen steht d
 Berechtigung für Kamera oder Mikrofon – der eingeblendete Hinweis erklärt dann, wo sie
 erteilt wird. Während der Aufnahme laufen oben links ein roter Punkt und ein Timer.
 
-Über den Text tippen = **Pause / Weiter**. Mit **−** und **＋** wird das Tempo im Lauf verändert,
-**⤒** springt zurück zum Anfang. Ohne Aufnahme läuft der Prompter über **„▶ Nur Prompter"**.
+**Verhaspelt? Pause und zurück.** Während des Laufs sind **„❚❚ Text anhalten"** und
+**„■ Stopp & speichern"** immer sichtbar. Die Pause hält **nur den Text** an – die Aufnahme
+läuft bewusst weiter, die Versprecher werden später im Schnitt entfernt (z. B. automatisch
+anhand der Sprechpausen oder eines gesprochenen Hinweises wie „Aufnahme nochmal").
+Im angehaltenen Zustand erscheinen die Sprungknöpfe:
 
-Angeschlossene Bluetooth-Tastaturen und -Fernbedienungen funktionieren ebenfalls:
-Leertaste = Pause/Weiter, Pfeil hoch/runter = Tempo, Home = Anfang, Esc = zurück.
+- **↑ Absatz** / **↑ Satz** – zum Anfang des aktuellen Absatzes bzw. Satzes; nochmals tippen
+  springt einen weiter zurück. Das Ziel leuchtet kurz grün auf.
+- **↑ Zeile** / **↓ Zeile** – zeilenweise feinjustieren.
+- Oder den Text einfach mit dem Finger verschieben (Wischen hält den Text automatisch an).
+
+**„▶ Weiter"** startet nach einem kurzen Vorlauf (Standard 2 Sekunden, einstellbar) – der
+kleine Zähler oben rechts lässt den Text frei, damit du den Satz schon lesen kannst.
+Während des Vorlaufs heißt der Knopf **„✕ Vorlauf stoppen"**. Am Textende wird daraus
+**„⤒ Von vorn"**.
+
+**Neue Aufnahme ab einer bestimmten Stelle:** Nach „Stopp & speichern" bleibt der Text, wo er
+war. Mit den Sprungknöpfen oder per Wischen die Startstelle wählen und
+**„● Aufnahme + Prompter"** tippen – die Aufnahme beginnt dort. **⤒** springt vorher zum Anfang.
+
+Über den Text oder das Kamerabild tippen = ebenfalls **Pause / Weiter**. Mit **−** und **＋**
+wird das Tempo im Lauf verändert, **⤒** springt zurück zum Anfang. Ohne Aufnahme läuft der
+Prompter über **„▶ Nur Prompter"**.
+
+Angeschlossene Bluetooth-Tastaturen und -Fernbedienungen (auch günstige Seitenwender)
+funktionieren ebenfalls:
+
+| Taste | Wirkung |
+|---|---|
+| Leertaste, Enter, Bild ab (PageDown) | Pause / Weiter |
+| Pfeil links, Bild auf (PageUp) | ↑ Satz zurück |
+| Rücktaste (Backspace) | ↑ Absatz zurück |
+| Pfeil rechts | ↓ eine Zeile vor |
+| Pfeil hoch / runter | Tempo schneller / langsamer |
+| Home | zum Anfang |
+| Esc | zurück zur Liste |
+
+### Kamerabild als Vollbild
+
+Standardmäßig füllt das Kamerabild den Bildschirm, der Text läuft darüber. Zu sehen ist
+**genau der aufgenommene Bildausschnitt** – so lässt sich prüfen, ob ein gezeigter Gegenstand
+richtig im Bild ist. Text, Knöpfe und Abdunkelung erscheinen **nicht** im Video.
+
+Einstellbar unter „Kamera & Ton": Selbstbild (Vollbild, mittel, klein, aus), Spiegeln
+(aus = Schrift auf gezeigten Produkten ist lesbar wie im fertigen Video), Abdunkelung des
+Kamerabildes und Textbereich (oberer Bereich mit rund 40 % der Höhe oder ganzer Bildschirm).
+Im Hochformat füllt das 9:16-Bild die Breite; oben und unten bleiben schmale schwarze
+Streifen, weil das Handy-Display länger ist als das Video.
 
 **Wichtig:** Oben im Prompter steht immer, welches Mikrofon tatsächlich benutzt wird
 (z. B. `🎤 DJI MIC MINI · 1920×1080 · MP4`). So fällt sofort auf, wenn das Handy
@@ -59,11 +102,29 @@ doch auf sein eigenes Mikrofon zurückgefallen ist.
 
 Tempo (in Wörtern pro Minute), Schriftgröße, Zeilenabstand, Seitenrand, Schriftfarbe,
 Lesemarke (Art und Position), Countdown, Bildschirm-Ausrichtung, Spiegelung für
-Spiegel-Teleprompter, Selbstbild samt Größe, Mikrofonauswahl und die Sprachfilter des Handys.
+Spiegel-Teleprompter, Vorlauf nach einer Pause, Selbstbild (Vollbild/Ecke/aus), Spiegeln des
+Selbstbildes, Abdunkelung, Textbereich, Mikrofonauswahl und die Sprachfilter des Handys.
 
 Das Tempo wird in Wörtern pro Minute eingestellt statt in Pixeln pro Sekunde. Dadurch bleibt
 das Sprechtempo gleich, auch wenn Schriftgröße oder Textbreite geändert werden – und die
 angezeigte Sprechzeit stimmt.
+
+## Nach der Aufnahme: Teilen
+
+Nach „Stopp & speichern" liegt das Video in den Downloads. Im Hinweis erscheint zusätzlich
+**„Teilen …"** – damit geht die Datei über das Teilen-Menü des Handys direkt an Google Fotos,
+Drive oder eine Schnitt-App. Die App selbst überträgt dabei nichts.
+
+## Absturzsicherung
+
+Während der Aufnahme wird jede Sekunde zusätzlich eine Sicherungskopie in den lokalen
+Speicher des Browsers geschrieben (IndexedDB, bleibt auf dem Gerät). Wird die App mitten in
+der Aufnahme geschlossen oder stürzt sie ab, erscheint beim nächsten Start oben auf der
+Startseite **„Unterbrochene Aufnahme gefunden"** mit **Speichern** oder **Verwerfen**.
+Nach einer regulär gespeicherten Aufnahme wird die Sicherungskopie automatisch gelöscht.
+Während der Aufnahme belegt das Video also zweimal Platz (Arbeitsspeicher und Sicherung),
+nach dem Speichern zusätzlich die Datei in den Downloads – bei langen Aufnahmen auf freien
+Speicher achten (10 Minuten ≈ 750 MB).
 
 ## Sicherung der Texte
 
@@ -80,16 +141,21 @@ Aufnahme über `getUserMedia` und `MediaRecorder`, Offline-Betrieb über einen S
 - `style.css` – Gestaltung
 - `js/store.js` – Texte und Einstellungen im Gerätespeicher
 - `js/recorder.js` – Kamera, Mikrofon, Aufnahme, Speichern
+- `js/backup.js` – Sicherungskopie während der Aufnahme, Rettung nach Absturz
 - `js/app.js` – Bedienung, Scroll-Motor, Aufnahmesteuerung
 - `sw.js` – Offline-Zwischenspeicher
 - `make_icons.py` – erzeugt die App-Icons (nur bei Änderungen am Icon nötig)
 
 Das Aufnahmeformat wird auf dem Gerät ermittelt: MP4, wenn möglich, sonst WebM.
+Die Aufnahme setzt jede Sekunde ein Schlüsselbild – das hält die Sicherungskopie aktuell und
+gibt dem Schnitt überall saubere Schnittpunkte.
 Welches Format aktiv ist, steht in den Einstellungen unter „Diese App".
 
 ### Nach einer Änderung
 
-In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v2`, `-v3`, …), sonst behalten die
-Geräte die alte Fassung im Zwischenspeicher. Übernimmt die neue Fassung die Kontrolle,
+In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v5`, `-v6`, …) **und** in `index.html`
+sowie in der Liste `PRECACHE` in `sw.js` die Kennung `?v=` an Stylesheet und Skripten auf
+denselben Wert setzen. Sonst behalten die Geräte die alte Fassung im Zwischenspeicher – oder
+laden beim ersten Start nach dem Update die neue Seite mit alten Skripten (leere Liste). Übernimmt die neue Fassung die Kontrolle,
 lädt die App sich selbst neu – außer im Prompter oder während einer laufenden Aufnahme,
 weil ein Neuladen die Aufnahme zerstören würde.

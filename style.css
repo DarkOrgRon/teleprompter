@@ -28,6 +28,7 @@
   --prompt-pad-top: 25vh;
   --prompt-mirror-x: 1;
   --prompt-mirror-y: 1;
+  --cam-dim: 0.4;
 }
 
 * { box-sizing: border-box; }
@@ -134,7 +135,7 @@ body { position: fixed; inset: 0; }
 .btn--rec { background: var(--red); color: #fff; }
 .btn--stop { background: #fff; color: #111; }
 .btn--wide { width: 100%; }
-.btn--small { min-height: 40px; padding: 8px 14px; font-size: 0.9rem; }
+.btn--small { min-height: 44px; padding: 8px 14px; font-size: 0.9rem; }
 
 .iconbtn {
   appearance: none;
@@ -342,6 +343,9 @@ body { position: fixed; inset: 0; }
   overflow: hidden;
   background: #000;
   transform: scale(var(--prompt-mirror-x), var(--prompt-mirror-y));
+  z-index: 2;
+  /* Wischen verschiebt den Text – der Browser soll dabei nicht scrollen oder zoomen */
+  touch-action: none;
 }
 
 .scroller {
@@ -351,6 +355,12 @@ body { position: fixed; inset: 0; }
   will-change: transform;
   transform: translate3d(0, calc(-1 * var(--prompt-scroll)), 0);
 }
+/* Nur fuer Spruenge (Zurueck-Knoepfe): kurz weich gleiten statt springen */
+.scroller.is-jumping { transition: transform 0.22s ease-out; }
+
+/* Kurz aufleuchtender Satz/Absatz nach einem Sprung */
+.prompttext .tp-s { border-radius: 4px; transition: background-color 0.6s; }
+.prompttext .tp-s.is-flash { background-color: rgba(149, 193, 31, 0.35); transition: none; }
 
 .prompttext {
   color: var(--prompt-color);
@@ -399,7 +409,7 @@ body { position: fixed; inset: 0; }
 .selfview {
   position: absolute;
   right: 12px;
-  bottom: calc(178px + env(safe-area-inset-bottom));
+  bottom: calc(240px + env(safe-area-inset-bottom));
   width: 90px;
   height: 120px;
   object-fit: cover;
@@ -410,7 +420,58 @@ body { position: fixed; inset: 0; }
   z-index: 3;
 }
 .selfview--medium { width: 140px; height: 187px; }
+.selfview--unmirrored { transform: none; }
 .selfview.is-hidden { display: none !important; }
+
+/* ---------- Vollbild-Kamera: Bild hinter dem Text ---------- */
+
+/* "contain" statt "cover": Es ist exakt der aufgenommene Bildausschnitt zu
+   sehen. Bei "cover" waere am Rand etwas abgeschnitten, das im Video
+   trotzdem auftaucht – man koennte Gezeigtes nicht sicher kontrollieren. */
+.screen--camfull .selfview {
+  inset: 0;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  z-index: 0;
+  touch-action: none;
+}
+.camdim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, var(--cam-dim));
+  z-index: 1;
+  pointer-events: none;
+  display: none;
+}
+.screen--camfull .camdim { display: block; }
+.screen--camfull .viewport { background: transparent; }
+
+/* Text auf bewegtem Bild: dunkle Kontur fuer sichere Lesbarkeit */
+.screen--camfull .prompttext {
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.95),
+    0 0 8px rgba(0, 0, 0, 0.85),
+    0 2px 2px rgba(0, 0, 0, 0.9);
+}
+.screen--camfull .statusbar { text-shadow: 0 1px 3px #000, 0 0 6px #000; color: #fff; }
+
+/* Textbereich nur oben: Gesicht und Haende bleiben frei.
+   Unten laeuft der Text weich aus, dahinter liegt ein leichter Schatten. */
+.screen--camfull.screen--textTop .viewport {
+  bottom: 60%;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.2));
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 84%, transparent 100%);
+}
+.screen--camfull .controls {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+}
 
 .statusbar {
   position: absolute;
@@ -457,8 +518,31 @@ body { position: fixed; inset: 0; }
   z-index: 5;
   transition: opacity 0.25s;
 }
-.controls.is-faded { opacity: 0; pointer-events: none; }
+/* Ausgeblendet wird nur die untere Navigationszeile. Pause, Weiter und
+   Stopp bleiben waehrend des Laufs immer sichtbar und sofort erreichbar. */
+.controls.is-faded { background: none; }
+.controls__row--nav { transition: opacity 0.25s; }
+.controls.is-faded .controls__row--nav { opacity: 0; pointer-events: none; }
 .controls__row { display: flex; align-items: center; gap: 8px; }
+.controls__row--rewind { justify-content: center; flex-wrap: wrap; }
+
+.btn--pause {
+  background: rgba(20, 26, 40, 0.88);
+  border-color: rgba(255, 255, 255, 0.35);
+  font-size: 1.05rem;
+}
+.btn--pause.is-paused { background: var(--green); color: #10230a; border-color: var(--green); }
+.btn--jump {
+  background: rgba(20, 26, 40, 0.88);
+  border-color: rgba(149, 193, 31, 0.6);
+  min-height: 52px;
+  padding: 8px 4px;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.screen--camfull .btn--stop { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
 /* Feste Mindesthoehe: sonst schrumpft die Zeile, sobald beim Aufnahmestart
    zwei Knoepfe durch einen ersetzt werden – die Bedienung wuerde nach unten
    rutschen und der Stopp-Knopf naeher an den Bildschirmrand wandern. */
@@ -467,6 +551,22 @@ body { position: fixed; inset: 0; }
   align-items: flex-start;
   flex-wrap: wrap;
   min-height: 96px;
+}
+/* Genau zwei Knoepfe mit festen, gleich breiten Plaetzen: kein Umbruch, kein
+   Springen – egal welche Beschriftung gerade drinsteht. Lange Texte brechen
+   innerhalb des Knopfs um. */
+.controls__row--main {
+  flex-wrap: nowrap;
+  align-items: stretch;
+  min-height: 0;
+}
+.controls__row--main .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 230px;
+  min-height: 60px;
+  padding: 8px 10px;
+  line-height: 1.25;
 }
 .controls__spacer { flex: 1 1 auto; }
 .speedlive {
@@ -490,6 +590,25 @@ body { position: fixed; inset: 0; }
   font-variant-numeric: tabular-nums;
 }
 
+.minicountdown {
+  position: absolute;
+  top: calc(max(8px, env(safe-area-inset-top)) + 34px);
+  right: 14px;
+  min-width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid var(--green);
+  color: var(--green);
+  font-size: 2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  z-index: 8;
+  pointer-events: none;
+}
+
 .notice {
   position: absolute;
   left: 12px; right: 12px;
@@ -504,6 +623,22 @@ body { position: fixed; inset: 0; }
   font-size: 0.95rem;
 }
 .notice strong { color: var(--green); }
+.notice__text { overflow-wrap: anywhere; }
+.notice__actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+
+/* ---------- Rettung unterbrochener Aufnahmen ---------- */
+
+.card--alert { border-color: var(--green); }
+.rescuelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rescuelist li { display: flex; flex-direction: column; gap: 8px; }
+.rescuelist .card__actions .btn { min-height: 44px; padding: 8px 14px; font-size: 0.9rem; }
+
+/* Im Prompter kein Markieren von Text und kein Kontextmenue bei langem Druck */
+#screen-prompter {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 
 /* ---------- Dialog & Toast ---------- */
 
@@ -547,7 +682,10 @@ body { position: fixed; inset: 0; }
 
 @media (orientation: landscape) and (max-height: 500px) {
   .controls { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  .controls__row--rewind { flex-wrap: nowrap; }
   .selfview { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .screen--camfull .selfview { bottom: auto; }
+  .screen--camfull.screen--textTop .viewport { bottom: 40%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
