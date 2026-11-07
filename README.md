@@ -71,7 +71,9 @@ erst „❚❚ Text anhalten" tippen): Schriftgröße, Zeilenabstand, Seitenrand
 Kamerabildes und Textbereich (ganzer Bildschirm oder oberer Bereich). Alles wirkt sofort, der
 Text bleibt an derselben Stelle. Beim Öffnen hält der Text an, eine laufende Aufnahme läuft
 weiter. Während einer Aufnahme steht im Feld zusätzlich **„■ Stopp & speichern"**.
-**„Alle Einstellungen …"** öffnet die vollständigen Einstellungen (nicht während einer
+**„✎ Text bearbeiten"** öffnet den Editor für diesen Text; Speichern oder **←** führt zurück in
+den Prompter an dieselbe Stelle (nicht während einer Aufnahme).
+**„Alle Einstellungen"** öffnet die vollständigen Einstellungen (nicht während einer
 Aufnahme); **„Zurück zum Prompter"** bzw. **←** führt danach wieder in denselben Text an
 dieselbe Stelle.
 
@@ -100,9 +102,17 @@ richtig im Bild ist. Text, Knöpfe und Abdunkelung erscheinen **nicht** im Video
 
 Einstellbar unter „Kamera & Ton": Selbstbild (Vollbild, mittel, klein, aus), Spiegeln
 (aus = Schrift auf gezeigten Produkten ist lesbar wie im fertigen Video), Abdunkelung des
-Kamerabildes und Textbereich (oberer Bereich mit rund 40 % der Höhe oder ganzer Bildschirm).
+Kamerabildes und Textbereich (ganzer Bildschirm, Standard, oder oberer Bereich mit rund 40 %
+der Höhe).
 Im Hochformat füllt das 9:16-Bild die Breite; oben und unten bleiben schmale schwarze
 Streifen, weil das Handy-Display länger ist als das Video.
+
+**Restzeit:** Oben in der Statuszeile steht in Grün die restliche Sprechzeit beim aktuellen
+Tempo (z. B. „noch 2:10"). So merkst du, ob du schneller oder langsamer als geplant sprichst.
+
+**Überschriften im Skript:** Eine eigene Zeile nur in Großbuchstaben ohne Satzzeichen am Ende
+(z. B. `HOOK`, `INTRO`, `1. ZWEIMAL IM WINTER`) erscheint im Prompter klein und grün als
+Abschnittsmarke. Sie zählt nicht zur Sprechzeit.
 
 **Wichtig:** Oben im Prompter steht immer, welches Mikrofon tatsächlich benutzt wird
 (z. B. `🎤 DJI MIC MINI · 1920×1080 · MP4`). So fällt sofort auf, wenn das Handy
@@ -119,11 +129,12 @@ Das Tempo wird in Wörtern pro Minute eingestellt statt in Pixeln pro Sekunde. D
 das Sprechtempo gleich, auch wenn Schriftgröße oder Textbreite geändert werden – und die
 angezeigte Sprechzeit stimmt.
 
-## Nach der Aufnahme: Teilen
+## Nach der Aufnahme
 
-Nach „Stopp & speichern" liegt das Video in den Downloads. Im Hinweis erscheint zusätzlich
-**„Teilen …"** – damit geht die Datei über das Teilen-Menü des Handys direkt an Google Fotos,
-Drive oder eine Schnitt-App. Die App selbst überträgt dabei nichts.
+Nach „Stopp & speichern" liegt das Video in den Downloads. Weitergeben (Google Fotos, Drive,
+Schnitt-App) über die Dateien-App des Handys → Teilen. Einen eigenen Teilen-Knopf hat die App
+seit Version 1.3 nicht mehr: Chrome bricht das Teilen großer Videodateien aus einer Web-App
+heraus oft mit einer Fehlermeldung ab.
 
 ## Absturzsicherung
 
@@ -163,7 +174,7 @@ Welches Format aktiv ist, steht in den Einstellungen unter „Diese App".
 
 ### Nach einer Änderung
 
-In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v6`, `-v7`, …) **und** in `index.html`
+In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v7`, `-v8`, …) **und** in `index.html`
 sowie in der Liste `PRECACHE` in `sw.js` die Kennung `?v=` an Stylesheet und Skripten auf
 denselben Wert setzen. Sonst behalten die Geräte die alte Fassung im Zwischenspeicher – oder
 laden beim ersten Start nach dem Update die neue Seite mit alten Skripten (leere Liste). Übernimmt die neue Fassung die Kontrolle,

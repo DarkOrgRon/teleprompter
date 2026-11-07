@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.2.0';
+  var APP_VERSION = '1.3.0';
 
   /* ---------- Elemente ---------- */
 
@@ -75,6 +75,7 @@
     camDim: $('camDim'),
     recDot: $('recDot'),
     recTimer: $('recTimer'),
+    remainLabel: $('remainLabel'),
     micLabel: $('micLabel'),
     controls: $('promptControls'),
     btnPrompterBack: $('btnPrompterBack'),
@@ -97,7 +98,6 @@
     notice: $('promptNotice'),
     noticeText: $('noticeText'),
     noticeActions: $('noticeActions'),
-    btnShare: $('btnShare'),
     btnNoticeClose: $('btnNoticeClose'),
     // Schnelleinstellungen
     btnQuickSettings: $('btnQuickSettings'),
@@ -119,6 +119,7 @@
     qTextFull: $('qTextFull'),
     qTextTop: $('qTextTop'),
     btnQuickAll: $('btnQuickAll'),
+    btnQuickEdit: $('btnQuickEdit'),
     qAllHint: $('qAllHint'),
     // Dialog / Toast
     confirmLayer: $('confirmLayer'),
@@ -160,10 +161,13 @@
   var leaving = false;        // Prompter wird gerade verlassen
   var prerollHandle = 0;      // Vorlauf beim Fortsetzen nach einer Pause
   var backupId = null;        // Kennung der laufenden Sicherungskopie
-  var lastRecording = null;   // { blob, fileName, mimeType } fuer den Teilen-Knopf
   var settingsReturnId = null; // Einstellungen wurden aus dem Prompter geoeffnet: dorthin zurueck
   var settingsReturnRatio = 0; // Textstelle (Anteil 0..1), an die danach zurueckgesprungen wird
   var ignoreTapsUntil = 0;     // kurz nach dem Oeffnen keine Tipps werten (Doppeltipp-Schutz)
+  var editorReturnId = null;   // Editor wurde aus dem Prompter geoeffnet: danach dorthin zurueck
+  var editorReturnRatio = 0;
+  var lastRemainText = '';
+  var editorOriginal = '';     // Stand beim Oeffnen des Editors (fuer die Rueckfrage beim Verwerfen)
 
   /* ============================================================
      Kleine Helfer: Toast und Bestaetigungsdialog
@@ -205,16 +209,14 @@
     if (event.target === el.confirmLayer) closeConfirm(false);
   });
 
-  /** Zeigt einen Hinweis im Prompter. options.share: Teilen-Knopf anbieten. */
-  function showNotice(text, options) {
+  /** Zeigt einen Hinweis im Prompter. */
+  function showNotice(text) {
     el.noticeText.textContent = '';
     var lines = String(text).split('\n');
     lines.forEach(function (line, index) {
       if (index > 0) el.noticeText.appendChild(document.createElement('br'));
       el.noticeText.appendChild(document.createTextNode(line));
     });
-    var share = !!(options && options.share);
-    el.btnShare.classList.toggle('is-hidden', !share);
     el.noticeActions.classList.remove('is-hidden');
     el.notice.classList.remove('is-hidden');
   }
@@ -273,7 +275,10 @@
       var actions = document.createElement('div');
       actions.className = 'textitem__actions';
 
-      actions.appendChild(makeAction('Bearbeiten', function () { openEditor(item.id); }));
+      actions.appendChild(makeAction('Bearbeiten', function () {
+        editorReturnId = null;
+        openEditor(item.id);
+      }));
       actions.appendChild(makeAction('Duplizieren', function () {
         if (TPStore.duplicateText(item.id)) {
           renderList();
@@ -315,6 +320,7 @@
     el.editorHeadline.textContent = record ? 'Text bearbeiten' : 'Neuer Text';
     el.editorTitle.value = record ? record.title : '';
     el.editorBody.value = record ? record.body : '';
+    editorOriginal = el.editorTitle.value + '\u0000' + el.editorBody.value;
     updateEditorStats();
     showScreen('editor');
     if (!record) window.setTimeout(function () { el.editorTitle.focus(); }, 120);
@@ -342,16 +348,57 @@
       return;
     }
     editingId = null;
-    renderList();
-    showScreen('list');
     toast('Gespeichert.');
+    if (!returnFromEditor(record.id)) {
+      renderList();
+      showScreen('list');
+    }
   }
 
-  el.btnNewText.addEventListener('click', function () { openEditor(null); });
+  /** Kurz nach dem Wechsel keine Tipps annehmen: ein Doppeltipp wuerde sonst
+      gleich einen Regler oder ein Feld auf der neuen Seite treffen. */
+  function guardScreen(screen) {
+    screen.style.pointerEvents = 'none';
+    window.setTimeout(function () { screen.style.pointerEvents = ''; }, 450);
+  }
+
+  /** Kam der Editor aus dem Prompter, geht es dorthin zurueck (an dieselbe Stelle). */
+  function returnFromEditor(id) {
+    var returnId = editorReturnId;
+    var ratio = editorReturnRatio;
+    editorReturnId = null;
+    editorReturnRatio = 0;
+    if (returnId && id === returnId && TPStore.getText(returnId)) {
+      openPrompter(returnId, ratio);
+      return true;
+    }
+    return false;
+  }
+
+  el.btnNewText.addEventListener('click', function () {
+    editorReturnId = null;
+    openEditor(null);
+  });
   el.btnEditorSave.addEventListener('click', saveEditor);
-  el.btnEditorBack.addEventListener('click', function () {
+  function leaveEditor() {
+    var id = editingId;
     editingId = null;
-    showScreen('list');
+    if (!returnFromEditor(id)) {
+      renderList();
+      showScreen('list');
+    }
+  }
+
+  el.btnEditorBack.addEventListener('click', function () {
+    var changed = (el.editorTitle.value + '\u0000' + el.editorBody.value) !== editorOriginal;
+    if (!changed) {
+      leaveEditor();
+      return;
+    }
+    confirmDialog('Änderungen verwerfen?',
+                  'Du hast den Text geändert, aber noch nicht gespeichert.',
+                  'Verwerfen')
+      .then(function (yes) { if (yes) leaveEditor(); });
   });
   el.editorBody.addEventListener('input', updateEditorStats);
 
@@ -689,14 +736,31 @@
   }
 
   function recalcSpeed() {
-    var words = currentText ? TPStore.countWords(currentText.body) : 0;
+    var words = currentText ? TPStore.countSpokenWords(currentText.body) : 0;
     var seconds = Math.max(1, (words / Math.max(20, settings.wpm)) * 60);
     scroll.pxPerSecond = scroll.distance / seconds;
     el.outSpeedLive.textContent = String(settings.wpm);
+    updateRemaining();
+  }
+
+  /** Restliche Sprechzeit beim aktuellen Tempo, oben in der Statuszeile. */
+  function updateRemaining() {
+    var show = !!currentText && scroll.pxPerSecond > 0 && scroll.distance > 1;
+    var text = '';
+    if (show) {
+      var seconds = Math.max(0, Math.round((scroll.distance - scroll.y) / scroll.pxPerSecond));
+      text = 'noch ' + Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+    }
+    if (text !== lastRemainText) {
+      lastRemainText = text;
+      el.remainLabel.textContent = text;
+      el.remainLabel.classList.toggle('is-hidden', !show);
+    }
   }
 
   function applyScroll() {
     document.documentElement.style.setProperty('--prompt-scroll', Math.round(scroll.y * 10) / 10 + 'px');
+    updateRemaining();
   }
 
   function frame(timestamp) {
@@ -925,12 +989,29 @@
       if (q < len && !starts[q]) starts[q] = 'sent';
     }
 
+    // Abschnitts-Ueberschriften (eigene Zeile in Grossbuchstaben) als eigener Abschnitt
+    // (eine Ueberschrift bleibt ein Stueck, auch wenn sie "1." enthaelt)
+    var lineStart = 0;
+    text.split('\n').forEach(function (line) {
+      if (TPStore.isHeadingLine(line)) {
+        var h = nextNonSpace(lineStart);
+        var lineEnd = lineStart + line.length;
+        Object.keys(starts).forEach(function (k) {
+          var idx = Number(k);
+          if (idx > h && idx < lineEnd) delete starts[k];
+        });
+        if (h < len) starts[h] = 'head';
+      }
+      lineStart += line.length + 1;
+    });
+
     var indices = Object.keys(starts).map(Number).sort(function (a, b) { return a - b; });
     var frag = document.createDocumentFragment();
     if (indices[0] > 0) frag.appendChild(document.createTextNode(text.slice(0, indices[0])));
     for (var i = 0; i < indices.length; i++) {
       var span = document.createElement('span');
-      span.className = starts[indices[i]] === 'para' ? 'tp-s tp-p' : 'tp-s';
+      var kind = starts[indices[i]];
+      span.className = kind === 'head' ? 'tp-s tp-p tp-h' : (kind === 'para' ? 'tp-s tp-p' : 'tp-s');
       span.textContent = text.slice(indices[i], i + 1 < indices.length ? indices[i + 1] : len);
       frag.appendChild(span);
     }
@@ -1133,7 +1214,6 @@
     applyPromptStyles();
     scroll.started = false;
     scroll.running = false;
-    lastRecording = null;
     cancelPreroll();
     cameraState = 'starting';
     setRecordingUi(false);
@@ -1152,6 +1232,8 @@
       if (startRatio > 0) {
         var lh = lineHeightPx();
         scroll.y = Math.min(scroll.distance, Math.round((startRatio * scroll.distance) / lh) * lh);
+        // Text stark gekuerzt: Stelle liegt am Ende – dann lieber von vorn
+        if (scroll.y >= scroll.distance - lh) scroll.y = 0;
         applyScroll();
         updateTransportUi();
       }
@@ -1238,7 +1320,8 @@
       if (result && result.blob && result.blob.size > 0) {
         var name = saveRecordingOnce(result, title);
         showNotice('Die Aufnahme wurde unterbrochen (' + (kind === 'audio' ? 'Mikrofon' : 'Kamera') + ').\n' +
-                   'Das bereits Aufgenommene wurde gesichert: ' + name, { share: canShareRecording() });
+                   'Das bereits Aufgenommene wurde gesichert: ' + name + '\n' +
+                   'Die Datei liegt im Ordner „Downloads“ deines Geräts.');
       } else {
         // Sicherungskopie bleibt erhalten – sie wird beim naechsten Start angeboten
         backupId = null;
@@ -1268,7 +1351,6 @@
       TPRecorder.close();
       if (el.selfview) el.selfview.srcObject = null;
       currentText = null;
-      lastRecording = null;
       scroll.started = false;
       hideNotice();
       renderList();
@@ -1397,7 +1479,6 @@
       try {
         var info = TPRecorder.startRecording();
         startBackup(info);
-        lastRecording = null;
         longRecordWarned = false;
         setRecordingUi(true);
         startTimer();
@@ -1436,52 +1517,10 @@
   function saveRecordingOnce(result, title) {
     if (!result.savedName) {
       result.savedName = TPRecorder.saveBlob(result.blob, result.extension, title);
-      rememberRecording(result, result.savedName);
       finishBackup();
     }
     return result.savedName;
   }
-
-  /* ---------- Teilen ---------- */
-
-  function rememberRecording(result, fileName) {
-    lastRecording = { blob: result.blob, fileName: fileName, mimeType: result.mimeType || result.blob.type };
-  }
-
-  function recordingAsFile() {
-    if (!lastRecording || typeof window.File !== 'function') return null;
-    try {
-      return new File([lastRecording.blob], lastRecording.fileName, { type: lastRecording.mimeType });
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function canShareRecording() {
-    if (!navigator.share || !navigator.canShare) return false;
-    var file = recordingAsFile();
-    if (!file) return false;
-    try {
-      return navigator.canShare({ files: [file] });
-    } catch (err) {
-      return false;
-    }
-  }
-
-  el.btnShare.addEventListener('click', function (event) {
-    event.stopPropagation();
-    var file = recordingAsFile();
-    if (!file || !canShareRecording()) {
-      toast('Teilen ist auf diesem Gerät nicht möglich. Die Datei liegt in den Downloads.', 5000);
-      return;
-    }
-    // Teilen geschieht ausschliesslich ueber das Teilen-Menue des Geraets –
-    // die App selbst uebertraegt nichts.
-    navigator.share({ files: [file], title: lastRecording.fileName }).catch(function (err) {
-      if (err && err.name === 'AbortError') return; // abgebrochen
-      toast('Teilen hat nicht geklappt. Die Datei liegt in den Downloads.', 5000);
-    });
-  });
 
   function stopRecordingAndSave(silent) {
     // Doppeltipp oder Verlassen waehrend des Speicherns: denselben Vorgang abwarten
@@ -1512,7 +1551,7 @@
       if (silent) {
         toast('Aufnahme gesichert: ' + name, 6000);
       } else {
-        showNotice(message, { share: canShareRecording() });
+        showNotice(message);
         showControls();
       }
     }).catch(function (err) {
@@ -1583,6 +1622,7 @@
     el.qTextTop.classList.toggle('is-active', settings.textArea === 'top');
     var recording = TPRecorder.isRecording() || !!stopInProgress;
     el.btnQuickAll.disabled = recording;
+    el.btnQuickEdit.disabled = recording;
     el.qAllHint.classList.toggle('is-hidden', !recording);
     el.btnQuickStop.classList.toggle('is-hidden', !TPRecorder.isRecording());
   }
@@ -1658,6 +1698,24 @@
     syncQuickPanel();
   });
 
+  /* Text bearbeiten: Prompter verlassen, Editor oeffnen; Speichern oder
+     Zurueck fuehrt wieder in den Prompter an dieselbe Stelle. */
+  el.btnQuickEdit.addEventListener('click', function (event) {
+    event.stopPropagation();
+    if (TPRecorder.isRecording() || stopInProgress || !currentText) {
+      syncQuickPanel();
+      return;
+    }
+    var returnId = currentText.id;
+    var returnRatio = scroll.distance > 1 && !scroll.finished ? scroll.y / scroll.distance : 0;
+    leavePrompter(function () {
+      editorReturnId = returnId;
+      editorReturnRatio = returnRatio;
+      openEditor(returnId);
+      guardScreen(el.screens.editor);
+    });
+  });
+
   /* Alle Einstellungen: Prompter verlassen (Kamera schliessen), danach
      fuehrt "Zurueck" wieder in den Prompter mit demselben Text. */
   el.btnQuickAll.addEventListener('click', function (event) {
@@ -1674,6 +1732,7 @@
       el.btnSettingsToPrompter.classList.toggle('is-hidden', !returnId);
       applySettingsToForm();
       showScreen('settings');
+      guardScreen(el.screens.settings);
     });
   });
 

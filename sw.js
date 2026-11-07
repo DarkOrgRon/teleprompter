@@ -8,16 +8,16 @@
 /* Bei jeder Aktualisierung der App hochzaehlen, damit Geraete die neue
    Fassung sicher erhalten – und GLEICHZEITIG die Kennung ?v= an Stylesheet
    und Skripten in index.html auf denselben Wert setzen. */
-var CACHE_NAME = 'teleprompter-v6';
+var CACHE_NAME = 'teleprompter-v7';
 
 var PRECACHE = [
   './',
   'index.html',
-  'style.css?v=6',
-  'js/store.js?v=6',
-  'js/recorder.js?v=6',
-  'js/backup.js?v=6',
-  'js/app.js?v=6',
+  'style.css?v=7',
+  'js/store.js?v=7',
+  'js/recorder.js?v=7',
+  'js/backup.js?v=7',
+  'js/app.js?v=7',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',

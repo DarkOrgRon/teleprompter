@@ -24,7 +24,7 @@ var TPStore = (function () {
     previewMode: 'full',  // off | small | medium | full (Kamerabild hinter dem Text)
     mirrorSelf: true,     // Selbstbild wie ein Spiegel anzeigen (Aufnahme bleibt ungespiegelt)
     camDim: 40,           // Prozent Abdunkelung des Kamerabildes im Vollbild
-    textArea: 'top',      // full | top – Textbereich im Vollbild
+    textArea: 'full',     // full | top – Textbereich im Vollbild (ganz: mehr Text im Voraus lesen)
     resumeDelay: 2,       // Sekunden Vorlauf beim Fortsetzen nach einer Pause
     micId: '',
     audioFilters: false,
@@ -58,6 +58,30 @@ var TPStore = (function () {
     return 'txt-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
   }
 
+  /**
+   * Abschnitts-Ueberschrift im Skript: eine eigene Zeile nur in Grossbuchstaben
+   * (z. B. "HOOK", "INTRO", "1. ZWEIMAL IM WINTER"), ohne Satzzeichen am Ende.
+   * Wird im Prompter hervorgehoben und nicht mitgesprochen.
+   */
+  function isHeadingLine(line) {
+    var t = String(line || '').trim();
+    if (t.length < 3 || t.length > 70) return false;
+    if (/[.!?…:]$/.test(t)) return false;
+    var letters = t.replace(/[^A-Za-zÄÖÜäöüßẞÀ-ÿ]/g, '');
+    if (letters.length < 3) return false;
+    // "ß" hat keine eigene Grossform im Alltag (STRASSE / STRAßE) – beim Vergleich ausklammern
+    var core = letters.replace(/[ßẞ]/g, '');
+    return core.length > 0 && core === core.toUpperCase() && core !== core.toLowerCase();
+  }
+
+  /** Woerter, die gesprochen werden (ohne Abschnitts-Ueberschriften). */
+  function countSpokenWords(text) {
+    if (!text) return 0;
+    return String(text).split('\n').reduce(function (sum, line) {
+      return isHeadingLine(line) ? sum : sum + countWords(line);
+    }, 0);
+  }
+
   function countWords(text) {
     if (!text) return 0;
     var trimmed = String(text).trim();
@@ -67,7 +91,7 @@ var TPStore = (function () {
 
   /** Geschaetzte Sprechdauer in Sekunden bei gegebenem Tempo. */
   function estimateSeconds(text, wpm) {
-    var words = countWords(text);
+    var words = countSpokenWords(text);
     var tempo = wpm > 0 ? wpm : DEFAULT_SETTINGS.wpm;
     return Math.round((words / tempo) * 60);
   }
@@ -278,6 +302,8 @@ var TPStore = (function () {
     importPayload: importPayload,
     importPlainText: importPlainText,
     countWords: countWords,
+    countSpokenWords: countSpokenWords,
+    isHeadingLine: isHeadingLine,
     estimateSeconds: estimateSeconds,
     formatDuration: formatDuration,
     formatDate: formatDate

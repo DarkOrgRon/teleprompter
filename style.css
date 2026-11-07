@@ -488,6 +488,7 @@ body { position: fixed; inset: 0; }
   pointer-events: none;
 }
 .statusbar__timer { font-variant-numeric: tabular-nums; font-weight: 700; color: #fff; }
+.statusbar__remain { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--green); white-space: nowrap; }
 .statusbar__mic {
   margin-left: auto;
   overflow: hidden;
@@ -663,7 +664,19 @@ body { position: fixed; inset: 0; }
 .segmented { display: flex; gap: 8px; }
 .btn--seg { flex: 1 1 0; min-height: 44px; padding: 8px 10px; font-size: 0.9rem; border-color: var(--line); background: transparent; }
 .btn--seg.is-active { background: var(--green); color: #10230a; border-color: var(--green); }
-#btnQuickAll { margin-top: 8px; }
+.quickpanel__links { display: flex; gap: 8px; margin: 2px 0 8px; }
+.quickpanel__links .btn { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 10px; font-size: 0.9rem; }
+
+/* Abschnitts-Ueberschriften im Skript (z. B. HOOK, 1. INTRO): klein, gruen,
+   werden nicht mitgesprochen. Die Zeilenhoehe bleibt durch den Absatz
+   unveraendert, damit die Spruenge weiter genau auf Zeilen einrasten. */
+.prompttext .tp-h {
+  font-size: 0.5em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--green);
+  vertical-align: top; /* oben in der Zeile: Spruenge rasten exakt ein */
+}
 
 /* ---------- Rettung unterbrochener Aufnahmen ---------- */
 

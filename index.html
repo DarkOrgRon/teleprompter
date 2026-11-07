@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- ?v= gemeinsam mit CACHE_NAME in sw.js hochzaehlen: so laufen nach einem
      Update nie neue Seite und alte Skripte aus dem Zwischenspeicher zusammen -->
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -85,7 +85,7 @@
 
     <label class="field field--grow">
       <span class="field__label">Text</span>
-      <textarea id="editorBody" class="input textarea" placeholder="Hier deinen Sprechertext einfügen …&#10;&#10;Eine Leerzeile erzeugt später einen Absatzabstand im Prompter."></textarea>
+      <textarea id="editorBody" class="input textarea" placeholder="Hier deinen Sprechertext einfügen …&#10;&#10;Eine Leerzeile erzeugt später einen Absatzabstand im Prompter.&#10;Zeilen nur in GROSSBUCHSTABEN (z. B. HOOK oder 1. INTRO) erscheinen als Überschrift und werden nicht mitgesprochen."></textarea>
     </label>
 
     <p class="hint" id="editorStats">0 Wörter</p>
@@ -231,8 +231,8 @@
     <label class="field">
       <span class="field__label">Textbereich im Vollbild</span>
       <select id="setTextArea" class="input select">
+        <option value="full">Ganzer Bildschirm – mehr Text im Voraus lesen</option>
         <option value="top">Oberer Bereich – mehr Sicht auf dich</option>
-        <option value="full">Ganzer Bildschirm</option>
       </select>
     </label>
 
@@ -288,6 +288,7 @@
   <div id="statusbar" class="statusbar">
     <span id="recDot" class="recdot is-hidden" aria-hidden="true"></span>
     <span id="recTimer" class="statusbar__timer is-hidden">00:00</span>
+    <span id="remainLabel" class="statusbar__remain is-hidden" title="Restliche Sprechzeit beim aktuellen Tempo">noch 0:00</span>
     <span id="micLabel" class="statusbar__mic">🎤 —</span>
   </div>
 
@@ -312,7 +313,7 @@
     <div class="controls__row controls__row--nav">
       <button type="button" id="btnPrompterBack" class="iconbtn iconbtn--dark" aria-label="Zurück zur Liste">←</button>
       <button type="button" id="btnRestart" class="iconbtn iconbtn--dark" aria-label="Zurück zum Anfang">⤒</button>
-      <button type="button" id="btnQuickSettings" class="iconbtn iconbtn--dark" aria-label="Darstellung anpassen">⚙</button>
+      <button type="button" id="btnQuickSettings" class="iconbtn iconbtn--dark" aria-label="Darstellung und Text">⚙</button>
       <span class="controls__spacer"></span>
       <button type="button" id="btnSlower" class="iconbtn iconbtn--dark" aria-label="Langsamer">−</button>
       <output id="outSpeedLive" class="speedlive">130</output>
@@ -323,13 +324,19 @@
   <!-- Schnelleinstellungen direkt im Prompter: wirken sofort, der Text bleibt sichtbar -->
   <div id="quickPanel" class="quickpanel is-hidden" role="dialog" aria-label="Darstellung anpassen">
     <div class="quickpanel__head">
-      <span class="quickpanel__title">Darstellung</span>
+      <span class="quickpanel__title">Darstellung &amp; Text</span>
       <span class="controls__spacer"></span>
       <!-- Waehrend der Aufnahme verdeckt das Feld die Hauptknoepfe: Stopp deshalb auch hier -->
       <button type="button" id="btnQuickStop" class="btn btn--stop btn--small is-hidden">■ Stopp &amp; speichern</button>
       <button type="button" id="btnQuickClose" class="iconbtn iconbtn--dark" aria-label="Schließen">✕</button>
     </div>
     <div class="quickpanel__body">
+      <!-- Bewusst ganz oben: "Text bearbeiten" wurde gesucht und soll sofort sichtbar sein -->
+      <div class="quickpanel__links">
+        <button type="button" id="btnQuickEdit" class="btn btn--ghost">✎ Text bearbeiten</button>
+        <button type="button" id="btnQuickAll" class="btn btn--ghost">Alle Einstellungen</button>
+      </div>
+      <p id="qAllHint" class="hint is-hidden">Text bearbeiten und alle Einstellungen sind während einer Aufnahme nicht möglich – erst „Stopp &amp; speichern“.</p>
       <div class="field">
         <span class="field__label">Schriftgröße <output id="qOutFontSize" class="out">44 px</output></span>
         <input type="range" id="qFontSize" class="range" min="24" max="120" step="2">
@@ -357,8 +364,6 @@
           <button type="button" id="qTextTop" class="btn btn--seg">Oberer Bereich</button>
         </div>
       </div>
-      <button type="button" id="btnQuickAll" class="btn btn--ghost btn--wide">Alle Einstellungen …</button>
-      <p id="qAllHint" class="hint is-hidden">Während einer Aufnahme nicht möglich – erst „Stopp &amp; speichern“.</p>
     </div>
   </div>
 
@@ -368,7 +373,6 @@
   <div id="promptNotice" class="notice is-hidden">
     <div id="noticeText" class="notice__text"></div>
     <div id="noticeActions" class="notice__actions is-hidden">
-      <button type="button" id="btnShare" class="btn btn--primary btn--small is-hidden">Teilen …</button>
       <button type="button" id="btnNoticeClose" class="btn btn--ghost btn--small">Schließen</button>
     </div>
   </div>
@@ -388,9 +392,9 @@
 
 <div id="toast" class="toast is-hidden" role="status" aria-live="polite"></div>
 
-<script src="js/store.js?v=6"></script>
-<script src="js/recorder.js?v=6"></script>
-<script src="js/backup.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/store.js?v=7"></script>
+<script src="js/recorder.js?v=7"></script>
+<script src="js/backup.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>
