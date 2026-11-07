@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '1.1.0';
+  var APP_VERSION = '1.2.0';
 
   /* ---------- Elemente ---------- */
 
@@ -37,6 +37,7 @@
     editorStats: $('editorStats'),
     // Einstellungen
     btnSettingsBack: $('btnSettingsBack'),
+    btnSettingsToPrompter: $('btnSettingsToPrompter'),
     settingsPreviewText: $('settingsPreviewText'),
     outWpm: $('outWpm'),
     setWpm: $('setWpm'),
@@ -98,6 +99,27 @@
     noticeActions: $('noticeActions'),
     btnShare: $('btnShare'),
     btnNoticeClose: $('btnNoticeClose'),
+    // Schnelleinstellungen
+    btnQuickSettings: $('btnQuickSettings'),
+    quickPanel: $('quickPanel'),
+    btnQuickClose: $('btnQuickClose'),
+    btnQuickStop: $('btnQuickStop'),
+    qFontSize: $('qFontSize'),
+    qOutFontSize: $('qOutFontSize'),
+    qLineHeight: $('qLineHeight'),
+    qOutLineHeight: $('qOutLineHeight'),
+    qMargin: $('qMargin'),
+    qOutMargin: $('qOutMargin'),
+    qWpm: $('qWpm'),
+    qOutWpm: $('qOutWpm'),
+    qCamDim: $('qCamDim'),
+    qOutCamDim: $('qOutCamDim'),
+    qCamDimField: $('qCamDimField'),
+    qTextAreaField: $('qTextAreaField'),
+    qTextFull: $('qTextFull'),
+    qTextTop: $('qTextTop'),
+    btnQuickAll: $('btnQuickAll'),
+    qAllHint: $('qAllHint'),
     // Dialog / Toast
     confirmLayer: $('confirmLayer'),
     confirmTitle: $('confirmTitle'),
@@ -139,6 +161,9 @@
   var prerollHandle = 0;      // Vorlauf beim Fortsetzen nach einer Pause
   var backupId = null;        // Kennung der laufenden Sicherungskopie
   var lastRecording = null;   // { blob, fileName, mimeType } fuer den Teilen-Knopf
+  var settingsReturnId = null; // Einstellungen wurden aus dem Prompter geoeffnet: dorthin zurueck
+  var settingsReturnRatio = 0; // Textstelle (Anteil 0..1), an die danach zurueckgesprungen wird
+  var ignoreTapsUntil = 0;     // kurz nach dem Oeffnen keine Tipps werten (Doppeltipp-Schutz)
 
   /* ============================================================
      Kleine Helfer: Toast und Bestaetigungsdialog
@@ -545,13 +570,26 @@
   });
 
   el.btnOpenSettings.addEventListener('click', function () {
+    settingsReturnId = null;
+    el.btnSettingsToPrompter.classList.add('is-hidden');
     applySettingsToForm();
     showScreen('settings');
   });
-  el.btnSettingsBack.addEventListener('click', function () {
+  /** Einstellungen verlassen – zurueck in den Prompter, falls sie von dort geoeffnet wurden. */
+  function closeSettings() {
+    var returnId = settingsReturnId;
+    settingsReturnId = null;
+    el.btnSettingsToPrompter.classList.add('is-hidden');
+    if (returnId && TPStore.getText(returnId)) {
+      openPrompter(returnId, settingsReturnRatio);
+      return;
+    }
     renderList();
     showScreen('list');
-  });
+  }
+
+  el.btnSettingsBack.addEventListener('click', closeSettings);
+  el.btnSettingsToPrompter.addEventListener('click', closeSettings);
 
   /* ---------- Mikrofonliste ---------- */
 
@@ -631,6 +669,7 @@
     var padTop = markerOffsetPx();
     document.documentElement.style.setProperty('--prompt-pad-top', padTop + 'px');
 
+    var oldDistance = scroll.distance;
     // Layout erst nach dem Setzen der Variablen messen
     scroll.distance = Math.max(1, el.promptBody.offsetHeight);
     recalcSpeed();
@@ -638,6 +677,11 @@
     if (!keepPosition) {
       scroll.y = 0;
       scroll.finished = false;
+    } else if (oldDistance > 1 && scroll.distance !== oldDistance) {
+      // Schrift/Rand geaendert: an derselben Textstelle bleiben (relativ statt in Pixeln)
+      var lhNow = lineHeightPx();
+      scroll.y = Math.min(scroll.distance,
+        Math.round((scroll.y * (scroll.distance / oldDistance)) / lhNow) * lhNow);
     } else if (scroll.y > scroll.distance) {
       scroll.y = scroll.distance;
     }
@@ -944,7 +988,7 @@
 
   function isControlTarget(target) {
     return !!(target && target.closest &&
-              target.closest('.controls, .notice, .countdown, .statusbar, button'));
+              target.closest('.controls, .notice, .countdown, .statusbar, .quickpanel, button'));
   }
 
   function onPointerDown(event) {
@@ -980,7 +1024,13 @@
     if (!drag || event.pointerId !== drag.id) return;
     var wasDrag = drag.moved;
     drag = null;
+    if (!wasDrag && Date.now() < ignoreTapsUntil) return;
     if (!wasDrag) {
+      // Tipp neben die offenen Schnelleinstellungen schliesst sie nur
+      if (isQuickPanelOpen()) {
+        closeQuickPanel();
+        return;
+      }
       // Steht ein Hinweis (z. B. "Aufnahme gespeichert") offen, schliesst der
       // erste Tipp nur den Hinweis – sonst wuerde der Text ungewollt starten.
       if (!el.notice.classList.contains('is-hidden') && !scroll.running) {
@@ -1068,7 +1118,7 @@
      Prompter oeffnen und verlassen
      ============================================================ */
 
-  function openPrompter(id) {
+  function openPrompter(id, startRatio) {
     var record = TPStore.getText(id);
     if (!record) {
       toast('Dieser Text wurde nicht gefunden.');
@@ -1078,6 +1128,7 @@
     currentText = record;
 
     renderPromptText(record.body || '');
+    closeQuickPanel();
     hideNotice();
     applyPromptStyles();
     scroll.started = false;
@@ -1094,8 +1145,16 @@
     enterImmersive();
 
     // Layout messen, nachdem der Bildschirm sichtbar ist
+    ignoreTapsUntil = Date.now() + 500;
     window.requestAnimationFrame(function () {
       layoutPrompter(false);
+      // Rueckkehr aus den Einstellungen: an derselben Textstelle weitermachen
+      if (startRatio > 0) {
+        var lh = lineHeightPx();
+        scroll.y = Math.min(scroll.distance, Math.round((startRatio * scroll.distance) / lh) * lh);
+        applyScroll();
+        updateTransportUi();
+      }
     });
 
     if (!record.body || !record.body.trim()) {
@@ -1188,8 +1247,9 @@
     });
   }
 
-  function leavePrompter() {
+  function leavePrompter(afterLeave) {
     if (leaving) return;
+    closeQuickPanel();
     leaving = true;
     abortCountdown();
     cancelPreroll();
@@ -1212,8 +1272,12 @@
       scroll.started = false;
       hideNotice();
       renderList();
-      showScreen('list');
-      checkForRescue();
+      if (typeof afterLeave === 'function') {
+        afterLeave();
+      } else {
+        showScreen('list');
+        checkForRescue();
+      }
     });
   }
 
@@ -1233,6 +1297,7 @@
     el.btnRecStop.classList.toggle('is-hidden', !active);
     el.btnRecStart.classList.toggle('is-hidden', active);
     updateTransportUi();
+    if (isQuickPanelOpen()) syncQuickPanel();
 
     if (active) return;
 
@@ -1494,6 +1559,124 @@
     leavePrompter();
   });
 
+  /* ---------- Schnelleinstellungen im Prompter ---------- */
+
+  function isQuickPanelOpen() {
+    return !el.quickPanel.classList.contains('is-hidden');
+  }
+
+  function syncQuickPanel() {
+    el.qFontSize.value = settings.fontSize;
+    el.qLineHeight.value = Math.round(settings.lineHeight * 10);
+    el.qMargin.value = settings.margin;
+    el.qWpm.value = settings.wpm;
+    el.qCamDim.value = settings.camDim;
+    el.qOutFontSize.textContent = settings.fontSize + ' px';
+    el.qOutLineHeight.textContent = String(settings.lineHeight.toFixed(1)).replace('.', ',');
+    el.qOutMargin.textContent = settings.margin + ' %';
+    el.qOutWpm.textContent = settings.wpm + ' Wörter/Min';
+    el.qOutCamDim.textContent = settings.camDim + ' %';
+    var full = settings.previewMode === 'full';
+    el.qCamDimField.classList.toggle('is-hidden', !full);
+    el.qTextAreaField.classList.toggle('is-hidden', !full);
+    el.qTextFull.classList.toggle('is-active', settings.textArea === 'full');
+    el.qTextTop.classList.toggle('is-active', settings.textArea === 'top');
+    var recording = TPRecorder.isRecording() || !!stopInProgress;
+    el.btnQuickAll.disabled = recording;
+    el.qAllHint.classList.toggle('is-hidden', !recording);
+    el.btnQuickStop.classList.toggle('is-hidden', !TPRecorder.isRecording());
+  }
+
+  function openQuickPanel() {
+    // Text anhalten, damit man in Ruhe einstellen kann – eine Aufnahme laeuft weiter
+    if (scroll.running) pauseScroll();
+    cancelPreroll();
+    updateTransportUi();
+    hideNotice();
+    syncQuickPanel();
+    el.quickPanel.classList.remove('is-hidden');
+    var body = el.quickPanel.querySelector('.quickpanel__body');
+    if (body) body.scrollTop = 0;
+  }
+
+  function closeQuickPanel() {
+    el.quickPanel.classList.add('is-hidden');
+  }
+
+  el.btnQuickSettings.addEventListener('click', function (event) {
+    event.stopPropagation();
+    if (countdownRunning) return;
+    if (isQuickPanelOpen()) closeQuickPanel(); else openQuickPanel();
+  });
+  el.btnQuickClose.addEventListener('click', function (event) {
+    event.stopPropagation();
+    closeQuickPanel();
+  });
+  el.btnQuickStop.addEventListener('click', function (event) {
+    event.stopPropagation();
+    closeQuickPanel();
+    stopRecordingAndSave(false);
+  });
+
+  el.qFontSize.addEventListener('input', function () {
+    settings.fontSize = parseInt(el.qFontSize.value, 10) || TPStore.DEFAULTS.fontSize;
+    onSettingChanged(true);
+    syncQuickPanel();
+  });
+  el.qLineHeight.addEventListener('input', function () {
+    settings.lineHeight = (parseInt(el.qLineHeight.value, 10) || 14) / 10;
+    onSettingChanged(true);
+    syncQuickPanel();
+  });
+  el.qMargin.addEventListener('input', function () {
+    var margin = parseInt(el.qMargin.value, 10);
+    settings.margin = isNaN(margin) ? TPStore.DEFAULTS.margin : margin;
+    onSettingChanged(true);
+    syncQuickPanel();
+  });
+  el.qWpm.addEventListener('input', function () {
+    settings.wpm = parseInt(el.qWpm.value, 10) || TPStore.DEFAULTS.wpm;
+    onSettingChanged(false);
+    recalcSpeed();
+    syncQuickPanel();
+  });
+  el.qCamDim.addEventListener('input', function () {
+    settings.camDim = parseInt(el.qCamDim.value, 10) || 0;
+    onSettingChanged(false);
+    syncQuickPanel();
+  });
+  el.qTextFull.addEventListener('click', function (event) {
+    event.stopPropagation();
+    settings.textArea = 'full';
+    onSettingChanged(true);
+    syncQuickPanel();
+  });
+  el.qTextTop.addEventListener('click', function (event) {
+    event.stopPropagation();
+    settings.textArea = 'top';
+    onSettingChanged(true);
+    syncQuickPanel();
+  });
+
+  /* Alle Einstellungen: Prompter verlassen (Kamera schliessen), danach
+     fuehrt "Zurueck" wieder in den Prompter mit demselben Text. */
+  el.btnQuickAll.addEventListener('click', function (event) {
+    event.stopPropagation();
+    if (TPRecorder.isRecording() || stopInProgress) {
+      syncQuickPanel();
+      return;
+    }
+    var returnId = currentText ? currentText.id : null;
+    var returnRatio = scroll.distance > 1 && !scroll.finished ? scroll.y / scroll.distance : 0;
+    leavePrompter(function () {
+      settingsReturnRatio = returnRatio;
+      settingsReturnId = returnId;
+      el.btnSettingsToPrompter.classList.toggle('is-hidden', !returnId);
+      applySettingsToForm();
+      showScreen('settings');
+    });
+  });
+
   function changeSpeed(delta) {
     var next = (parseInt(settings.wpm, 10) || TPStore.DEFAULTS.wpm) + delta;
     next = Math.min(240, Math.max(60, next));
@@ -1556,11 +1739,26 @@
 
   document.addEventListener('keydown', function (event) {
     if (!el.screens.prompter.classList.contains('is-active')) return;
+    if (isQuickPanelOpen() && event.key === 'Escape') {
+      // Auch wenn gerade ein Regler im Feld den Fokus hat
+      event.preventDefault();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      closeQuickPanel();
+      return;
+    }
     var tag = (event.target && event.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if (!el.confirmLayer.classList.contains('is-hidden')) return;
     if (countdownRunning && event.key !== 'Escape') return;
     if (event.repeat) return; // gehaltene Taste nicht als Dauerfeuer werten
+    if (isQuickPanelOpen()) {
+      // Bei offenen Schnelleinstellungen schliesst Esc nur das Feld
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeQuickPanel();
+      }
+      return;
+    }
 
     switch (event.key) {
       case ' ':

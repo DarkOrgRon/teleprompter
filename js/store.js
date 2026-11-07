@@ -110,6 +110,15 @@ var TPStore = (function () {
       result.previewMode = DEFAULT_SETTINGS.previewMode;
     }
     if (['full', 'top'].indexOf(result.textArea) === -1) result.textArea = DEFAULT_SETTINGS.textArea;
+    // Zahlenwerte absichern: beschaedigter Speicher darf die App nie lahmlegen
+    function num(value, min, max, fallback) {
+      var n = parseFloat(value);
+      return isNaN(n) ? fallback : Math.min(max, Math.max(min, n));
+    }
+    result.wpm = Math.round(num(result.wpm, 60, 240, DEFAULT_SETTINGS.wpm));
+    result.fontSize = Math.round(num(result.fontSize, 24, 120, DEFAULT_SETTINGS.fontSize));
+    result.lineHeight = Math.round(num(result.lineHeight, 1, 2.5, DEFAULT_SETTINGS.lineHeight) * 10) / 10;
+    result.margin = Math.round(num(result.margin, 0, 25, DEFAULT_SETTINGS.margin));
     var dim = parseInt(result.camDim, 10);
     result.camDim = isNaN(dim) ? DEFAULT_SETTINGS.camDim : Math.min(80, Math.max(0, dim));
     var delay = parseInt(result.resumeDelay, 10);

@@ -65,6 +65,16 @@ Während des Vorlaufs heißt der Knopf **„✕ Vorlauf stoppen"**. Am Textende 
 war. Mit den Sprungknöpfen oder per Wischen die Startstelle wählen und
 **„● Aufnahme + Prompter"** tippen – die Aufnahme beginnt dort. **⤒** springt vorher zum Anfang.
 
+**Darstellung direkt im Prompter anpassen:** Unten in der Leiste öffnet **⚙** die
+Schnelleinstellungen (läuft der Text, blendet sich diese Leiste nach 3 Sekunden aus – dann
+erst „❚❚ Text anhalten" tippen): Schriftgröße, Zeilenabstand, Seitenrand, Tempo, Abdunkelung des
+Kamerabildes und Textbereich (ganzer Bildschirm oder oberer Bereich). Alles wirkt sofort, der
+Text bleibt an derselben Stelle. Beim Öffnen hält der Text an, eine laufende Aufnahme läuft
+weiter. Während einer Aufnahme steht im Feld zusätzlich **„■ Stopp & speichern"**.
+**„Alle Einstellungen …"** öffnet die vollständigen Einstellungen (nicht während einer
+Aufnahme); **„Zurück zum Prompter"** bzw. **←** führt danach wieder in denselben Text an
+dieselbe Stelle.
+
 Über den Text oder das Kamerabild tippen = ebenfalls **Pause / Weiter**. Mit **−** und **＋**
 wird das Tempo im Lauf verändert, **⤒** springt zurück zum Anfang. Ohne Aufnahme läuft der
 Prompter über **„▶ Nur Prompter"**.
@@ -153,7 +163,7 @@ Welches Format aktiv ist, steht in den Einstellungen unter „Diese App".
 
 ### Nach einer Änderung
 
-In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v5`, `-v6`, …) **und** in `index.html`
+In `sw.js` die Zeile `var CACHE_NAME` hochzählen (`-v6`, `-v7`, …) **und** in `index.html`
 sowie in der Liste `PRECACHE` in `sw.js` die Kennung `?v=` an Stylesheet und Skripten auf
 denselben Wert setzen. Sonst behalten die Geräte die alte Fassung im Zwischenspeicher – oder
 laden beim ersten Start nach dem Update die neue Seite mit alten Skripten (leere Liste). Übernimmt die neue Fassung die Kontrolle,

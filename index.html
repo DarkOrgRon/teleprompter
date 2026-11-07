@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- ?v= gemeinsam mit CACHE_NAME in sw.js hochzaehlen: so laufen nach einem
      Update nie neue Seite und alte Skripte aus dem Zwischenspeicher zusammen -->
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -97,6 +97,9 @@
   <header class="topbar">
     <button type="button" id="btnSettingsBack" class="iconbtn" aria-label="Zurück">←</button>
     <h1 class="topbar__title">Einstellungen</h1>
+    <div class="topbar__actions">
+      <button type="button" id="btnSettingsToPrompter" class="btn btn--primary btn--small is-hidden">Zurück zum Prompter</button>
+    </div>
   </header>
 
   <div class="scrollarea">
@@ -309,10 +312,53 @@
     <div class="controls__row controls__row--nav">
       <button type="button" id="btnPrompterBack" class="iconbtn iconbtn--dark" aria-label="Zurück zur Liste">←</button>
       <button type="button" id="btnRestart" class="iconbtn iconbtn--dark" aria-label="Zurück zum Anfang">⤒</button>
+      <button type="button" id="btnQuickSettings" class="iconbtn iconbtn--dark" aria-label="Darstellung anpassen">⚙</button>
       <span class="controls__spacer"></span>
       <button type="button" id="btnSlower" class="iconbtn iconbtn--dark" aria-label="Langsamer">−</button>
       <output id="outSpeedLive" class="speedlive">130</output>
       <button type="button" id="btnFaster" class="iconbtn iconbtn--dark" aria-label="Schneller">＋</button>
+    </div>
+  </div>
+
+  <!-- Schnelleinstellungen direkt im Prompter: wirken sofort, der Text bleibt sichtbar -->
+  <div id="quickPanel" class="quickpanel is-hidden" role="dialog" aria-label="Darstellung anpassen">
+    <div class="quickpanel__head">
+      <span class="quickpanel__title">Darstellung</span>
+      <span class="controls__spacer"></span>
+      <!-- Waehrend der Aufnahme verdeckt das Feld die Hauptknoepfe: Stopp deshalb auch hier -->
+      <button type="button" id="btnQuickStop" class="btn btn--stop btn--small is-hidden">■ Stopp &amp; speichern</button>
+      <button type="button" id="btnQuickClose" class="iconbtn iconbtn--dark" aria-label="Schließen">✕</button>
+    </div>
+    <div class="quickpanel__body">
+      <div class="field">
+        <span class="field__label">Schriftgröße <output id="qOutFontSize" class="out">44 px</output></span>
+        <input type="range" id="qFontSize" class="range" min="24" max="120" step="2">
+      </div>
+      <div class="field">
+        <span class="field__label">Zeilenabstand <output id="qOutLineHeight" class="out">1,4</output></span>
+        <input type="range" id="qLineHeight" class="range" min="10" max="25" step="1">
+      </div>
+      <div class="field">
+        <span class="field__label">Seitenrand <output id="qOutMargin" class="out">8 %</output></span>
+        <input type="range" id="qMargin" class="range" min="0" max="25" step="1">
+      </div>
+      <div class="field">
+        <span class="field__label">Tempo <output id="qOutWpm" class="out">130 Wörter/Min</output></span>
+        <input type="range" id="qWpm" class="range" min="60" max="240" step="5">
+      </div>
+      <div class="field" id="qCamDimField">
+        <span class="field__label">Kamerabild abdunkeln <output id="qOutCamDim" class="out">40 %</output></span>
+        <input type="range" id="qCamDim" class="range" min="0" max="80" step="5">
+      </div>
+      <div class="field" id="qTextAreaField">
+        <span class="field__label">Textbereich</span>
+        <div class="segmented">
+          <button type="button" id="qTextFull" class="btn btn--seg">Ganzer Bildschirm</button>
+          <button type="button" id="qTextTop" class="btn btn--seg">Oberer Bereich</button>
+        </div>
+      </div>
+      <button type="button" id="btnQuickAll" class="btn btn--ghost btn--wide">Alle Einstellungen …</button>
+      <p id="qAllHint" class="hint is-hidden">Während einer Aufnahme nicht möglich – erst „Stopp &amp; speichern“.</p>
     </div>
   </div>
 
@@ -342,9 +388,9 @@
 
 <div id="toast" class="toast is-hidden" role="status" aria-live="polite"></div>
 
-<script src="js/store.js?v=5"></script>
-<script src="js/recorder.js?v=5"></script>
-<script src="js/backup.js?v=5"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/store.js?v=6"></script>
+<script src="js/recorder.js?v=6"></script>
+<script src="js/backup.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>
